@@ -21,9 +21,9 @@
   },
   "strategy": {
     "min_odds": 3.5,
-    "max_odds": 9,
-    "bet_type": "win",
-    "checkpoint": "T-1",
+    "max_odds": 50,
+    "bet_type": "place",
+    "checkpoint": "T-5",
     "stake": 10
   },
   "monte_carlo": {
