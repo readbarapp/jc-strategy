@@ -40,9 +40,11 @@ DEFAULTS: dict[str, Any] = {
         "enabled": False,
         "chat_id": "",
         "bot_token": "",
+        "bet_type": "win",
+        "checkpoint": "T-1",
         "min_odds": 3.5,
         "max_odds": 9.0,
-        "min_drop_pct": 20,
+        "min_drop_pct": 50,
     },
     "github": {
         "owner": "",

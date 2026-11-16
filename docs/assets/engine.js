@@ -176,7 +176,8 @@
   const CHECKPOINTS = ["T-15", "T-10", "T-5", "T-3", "T-1", "T-0"];
   const CP_SUFFIX = { "T-15": "t15", "T-10": "t10", "T-5": "t5", "T-3": "t3", "T-1": "t1", "T-0": "t0" };
 
-  function pivotOdds(rows, threshold) {
+  function pivotOdds(rows, threshold, pool) {
+    const field = pool === "place" ? "place_odds" : "win_odds";
     const grouped = new Map();
     for (const row of rows) {
       const cp = row.checkpoint;
@@ -196,7 +197,7 @@
       const item = grouped.get(key);
       if (row.horse_name) item.horse_name = row.horse_name;
       if (row.scheduled_time) item.scheduled_time = row.scheduled_time;
-      item.odds[cp] = num(row.win_odds, NaN);
+      item.odds[cp] = num(row[field], NaN);
     }
     const wide = [];
     for (const item of grouped.values()) {
@@ -207,13 +208,14 @@
         scheduled_time: item.scheduled_time,
         horse_no: item.horse_no,
         horse_name: item.horse_name,
+        pool: pool === "place" ? "PLA" : "WIN",
       };
       const brownAt = [];
       let prevCp = null;
       for (const cp of CHECKPOINTS) {
         const suffix = CP_SUFFIX[cp];
         const current = item.odds[cp];
-        out["win_" + suffix] = Number.isFinite(current) ? current : "";
+        out["odds_" + suffix] = Number.isFinite(current) ? current : "";
         if (!prevCp) {
           prevCp = cp;
           continue;

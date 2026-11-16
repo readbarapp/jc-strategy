@@ -5,27 +5,28 @@
   const { evaluate, monteCarlo, pivotOdds } = window.HKJCEngine;
 
   const ODDS_BOARD_COLS = [
-    { key: "win_t15", label: "開賽前15分鐘", brownKey: null },
-    { key: "win_t10", label: "開賽前10分鐘", brownKey: "brown_t10" },
-    { key: "win_t5", label: "開賽前5分鐘", brownKey: "brown_t5" },
-    { key: "win_t3", label: "開賽前3分鐘", brownKey: "brown_t3" },
-    { key: "win_t1", label: "開賽前1分鐘", brownKey: "brown_t1" },
-    { key: "win_t0", label: "開跑", brownKey: "brown_t0" },
+    { key: "odds_t15", label: "開賽前15分鐘", brownKey: null },
+    { key: "odds_t10", label: "開賽前10分鐘", brownKey: "brown_t10" },
+    { key: "odds_t5", label: "開賽前5分鐘", brownKey: "brown_t5" },
+    { key: "odds_t3", label: "開賽前3分鐘", brownKey: "brown_t3" },
+    { key: "odds_t1", label: "開賽前1分鐘", brownKey: "brown_t1" },
+    { key: "odds_t0", label: "開跑", brownKey: "brown_t0" },
   ];
   const WIDE_EXPORT_PAIRS = [
+    ["pool", "彩池"],
     ["race_date", "日期"],
     ["venue", "場地"],
     ["race_no", "場次"],
     ["scheduled_time", "開跑時間"],
     ["horse_no", "馬號"],
     ["horse_name", "馬名"],
-    ["win_t15", "開賽前15分鐘"],
-    ["win_t10", "開賽前10分鐘"],
-    ["win_t5", "開賽前5分鐘"],
-    ["win_t3", "開賽前3分鐘"],
-    ["win_t1", "開賽前1分鐘"],
-    ["win_t0", "開跑"],
-    ["brown_at", "啡格時間點"],
+    ["odds_t15", "開賽前15分鐘"],
+    ["odds_t10", "開賽前10分鐘"],
+    ["odds_t5", "開賽前5分鐘"],
+    ["odds_t3", "開賽前3分鐘"],
+    ["odds_t1", "開賽前1分鐘"],
+    ["odds_t0", "開跑"],
+    ["brown_at", "急跌時間點"],
   ];
 
   const RESULT_FIELDS = [
@@ -43,7 +44,7 @@
     notice: "",
     noticeKind: "info",
     page: 1,
-    tableSource: "odds",
+    tableSource: "win",
     chart: null,
     backtest: null,
     mc: null,
@@ -72,8 +73,15 @@
     return num($("brown-threshold") && $("brown-threshold").value, 50);
   }
 
-  function oddsBoard() {
-    return pivotOdds(state.odds, currentThreshold());
+  function oddsBoard(pool) {
+    const which = pool || (state.tableSource === "place" ? "place" : "win");
+    return pivotOdds(state.odds, currentThreshold(), which);
+  }
+
+  function setSourceChip(id) {
+    ["src-win", "src-place", "src-results"].forEach((chip) => {
+      if ($(chip)) $(chip).classList.toggle("chip-on", chip === id);
+    });
   }
 
   function tickClock() {
@@ -145,9 +153,12 @@
     $("tg-enabled").checked = !!t.enabled;
     $("tg-chat").value = t.chat_id || "";
     $("tg-token").value = t.bot_token || "";
+    $("tg-bet-type").value = t.bet_type || s.bet_type || "win";
+    $("tg-checkpoint").value = t.checkpoint || s.checkpoint || "T-1";
     $("tg-min-odds").value = t.min_odds ?? 3.5;
     $("tg-max-odds").value = t.max_odds ?? 9.0;
-    $("tg-drop").value = t.min_drop_pct ?? 20;
+    $("tg-drop").value = t.min_drop_pct ?? d.brown_grid_drop_pct ?? 50;
+    if (typeof renderTelegramPreview === "function") renderTelegramPreview();
     $("gh-owner").value = state.github.owner || "";
     $("gh-repo").value = state.github.repo || "";
     $("gh-branch").value = state.github.branch || "main";
@@ -185,13 +196,13 @@
     const race = $("filter-race").value;
     const horse = $("filter-horse").value.trim();
     const brown = $("filter-brown").checked;
-    const src = state.tableSource === "results" ? state.results : oddsBoard();
+    const src = state.tableSource === "results" ? state.results : oddsBoard(state.tableSource);
     return src.filter((row) => {
       if (date && row.race_date !== date) return false;
       if (venue && row.venue !== venue) return false;
       if (race && String(row.race_no) !== race) return false;
       if (horse && String(row.horse_no) !== horse) return false;
-      if (brown && state.tableSource === "odds" && !isTrue(row.is_brown_grid) && !row.brown_at) return false;
+      if (brown && state.tableSource !== "results" && !isTrue(row.is_brown_grid) && !row.brown_at) return false;
       return true;
     });
   }
@@ -235,7 +246,14 @@
         })
         .join("");
     } else {
-      $("table-meta").textContent = `顯示 ${rows.length} 匹馬 · 第 ${state.page}/${pages} 頁 · 啡格 = 該時間點獨贏較上一節點跌 ≥ ${currentThreshold()}%`;
+      const poolName = state.tableSource === "place" ? "位置賠率" : "獨贏賠率";
+      $("table-meta").textContent = `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 急跌格 = 較上一節點跌 ≥ ${currentThreshold()}%`;
+      if ($("board-legend")) {
+        $("board-legend").innerHTML =
+          state.tableSource === "place"
+            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。急跌格＝呢個時間點位置賠率較上一個時間點跌 ≥ 門檻。獨贏同位置係分開兩個彩池、兩欄數字，唔會撈亂。"
+            : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。啡格／急跌格＝呢個時間點獨贏較上一個時間點跌 ≥ 門檻。位置賠率請撳上面「位置賠率」。而家舊日子係<strong class=\"text-amber-200\">示範假數據</strong>；真賽日同一套程式寫入真實 WIN／PLA。";
+      }
       $("data-head").innerHTML = `<tr>
         <th>日期</th><th>場地</th><th>場次</th><th>開跑</th><th>馬號</th><th>馬名</th>
         ${ODDS_BOARD_COLS.map((c) => `<th>${c.label}</th>`).join("")}
@@ -432,9 +450,11 @@
     cfg.monte_carlo.simulations = num($("mc-sims").value, 1000);
     cfg.telegram.enabled = $("tg-enabled").checked;
     cfg.telegram.chat_id = $("tg-chat").value.trim();
+    cfg.telegram.bet_type = $("tg-bet-type").value;
+    cfg.telegram.checkpoint = $("tg-checkpoint").value || "T-1";
     cfg.telegram.min_odds = num($("tg-min-odds").value, 3.5);
     cfg.telegram.max_odds = num($("tg-max-odds").value, 9.0);
-    cfg.telegram.min_drop_pct = num($("tg-drop").value, 20);
+    cfg.telegram.min_drop_pct = num($("tg-drop").value, 50);
     cfg.telegram.bot_token = "";
     cfg.github.owner = $("gh-owner").value.trim();
     cfg.github.repo = $("gh-repo").value.trim();
@@ -506,6 +526,26 @@
     await trigger("test-telegram");
   }
 
+  function renderTelegramPreview() {
+    const el = $("tg-preview");
+    if (!el) return;
+    const betLabels = { win: "只買獨贏", place: "只買位置", win_place: "獨贏 + 位置" };
+    const bet = betLabels[$("tg-bet-type") && $("tg-bet-type").value] || "只買獨贏";
+    const cp = ($("tg-checkpoint") && $("tg-checkpoint").value) || "T-1";
+    const lo = Number(($("tg-min-odds") && $("tg-min-odds").value) || 3.5).toFixed(1);
+    const hi = Number(($("tg-max-odds") && $("tg-max-odds").value) || 9.0).toFixed(1);
+    const drop = Number(($("tg-drop") && $("tg-drop").value) || 50).toFixed(0);
+    el.textContent =
+      `🚨 落飛警報 · 🟤 啡格\n\n` +
+      `📅 2026-11-15（日）沙田\n` +
+      `🏁 第 5 場  開跑 15:20:00\n` +
+      `🐴 7. 金程千里\n` +
+      `📉 獨贏 8.4 → 3.8  (-54.8%)\n` +
+      `📍 位置 1.9\n` +
+      `🎯 ${bet} · ${cp}\n` +
+      `⏰ ${cp}  ·  獨贏範圍 ${lo}–${hi}  ·  跌幅 ≥ ${drop}%`;
+  }
+
   function bind() {
     document.querySelectorAll("[data-tab]").forEach((btn) => {
       btn.addEventListener("click", () => showTab(btn.getAttribute("data-tab")));
@@ -537,18 +577,22 @@
         renderDataTable();
       });
     });
-    $("src-odds").addEventListener("click", () => {
-      state.tableSource = "odds";
+    $("src-win").addEventListener("click", () => {
+      state.tableSource = "win";
       state.page = 1;
-      $("src-odds").classList.add("chip-on");
-      $("src-results").classList.remove("chip-on");
+      setSourceChip("src-win");
+      renderDataTable();
+    });
+    $("src-place").addEventListener("click", () => {
+      state.tableSource = "place";
+      state.page = 1;
+      setSourceChip("src-place");
       renderDataTable();
     });
     $("src-results").addEventListener("click", () => {
       state.tableSource = "results";
       state.page = 1;
-      $("src-results").classList.add("chip-on");
-      $("src-odds").classList.remove("chip-on");
+      setSourceChip("src-results");
       renderDataTable();
     });
     $("page-prev").addEventListener("click", () => {
@@ -559,8 +603,8 @@
       state.page += 1;
       renderDataTable();
     });
-    $("dl-odds").addEventListener("click", () => {
-      const wide = oddsBoard();
+    function downloadPool(pool, filename) {
+      const wide = oddsBoard(pool);
       const labels = WIDE_EXPORT_PAIRS.map((p) => p[1]);
       const keys = WIDE_EXPORT_PAIRS.map((p) => p[0]);
       const esc = (v) => {
@@ -569,12 +613,27 @@
       };
       const lines = [labels.join(",")];
       for (const row of wide) {
-        lines.push(keys.map((k) => esc(k === "venue" ? venueName(row[k]) : (isTrue(row[k]) ? "是" : row[k] === false ? "否" : row[k]))).join(","));
+        lines.push(keys.map((k) => esc(k === "venue" ? venueName(row[k]) : row[k])).join(","));
       }
-      downloadBlob("odds_board.csv", lines.join("\n") + "\n", "text/csv;charset=utf-8");
-    });
+      downloadBlob(filename, lines.join("\n") + "\n", "text/csv;charset=utf-8");
+    }
+    $("dl-win").addEventListener("click", () => downloadPool("win", "win_odds_board.csv"));
+    $("dl-place").addEventListener("click", () => downloadPool("place", "place_odds_board.csv"));
     $("dl-results").addEventListener("click", () => {
       downloadBlob("race_results.csv", toCsv(state.results, RESULT_FIELDS), "text/csv;charset=utf-8");
+    });
+    $("btn-tg-copy-strategy").addEventListener("click", () => {
+      $("tg-bet-type").value = $("bet-type").value;
+      $("tg-checkpoint").value = $("checkpoint").value;
+      $("tg-min-odds").value = $("min-odds").value;
+      $("tg-max-odds").value = $("max-odds").value;
+      $("tg-drop").value = $("brown-threshold").value;
+      renderTelegramPreview();
+      toast("已把策略頁嘅投注方法、時間點、賠率範圍抄到 Telegram", "ok");
+    });
+    ["tg-bet-type", "tg-checkpoint", "tg-min-odds", "tg-max-odds", "tg-drop"].forEach((id) => {
+      $(id).addEventListener("input", renderTelegramPreview);
+      $(id).addEventListener("change", renderTelegramPreview);
     });
     $("btn-reload").addEventListener("click", loadAll);
     $("btn-save-config").addEventListener("click", saveConfigRemote);
