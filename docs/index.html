@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/app.css?v=20261116h" />
+  <link rel="stylesheet" href="./assets/app.css?v=20261116j" />
 </head>
 <body class="min-h-screen text-slate-100 rail">
   <div class="flex min-h-screen">
@@ -67,23 +67,48 @@
         <!-- DATA -->
         <section data-panel="data" class="space-y-6">
           <p id="data-origin-banner" class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">數據來源載入中…</p>
-          <article class="kpi-card">
-            <h2 class="text-sm font-semibold text-gold-300">點樣收錄數據（用日常說話講）</h2>
-            <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-slate-300">
-              <li>系統全日每隔大約半個鐘問馬會：「今日沙田或者跑馬地有冇賽馬？第一場幾點開跑？」冇就收工。有就跟<strong class="text-gold-300">當日官方第一場開跑時間</strong>倒數，唔係寫死 11:00／17:30。</li>
-              <li>開跑前 15、10、5、1 分鐘同開跑嗰下，分別向馬會問<strong class="text-gold-300">兩個獨立彩池</strong>：獨贏（WIN）同位置（PLA）。兩個數字分開寫入兩欄，唔會撈亂。唔再抄開賽前 3 分鐘。</li>
-              <li>獨贏啡格：呢個鐘點嘅<strong class="text-gold-300">獨贏</strong>比起<strong class="text-gold-300">上一個鐘點（大約 5 分鐘前）</strong>平咗一半或以上。例如開賽前 1 分鐘同開賽前 5 分鐘比。位置表用同樣方法睇位置急跌，但策略／通知預設仍然用獨贏啡格做訊號。</li>
-              <li>賽事完咗再抄官方名次、獨贏派彩、位置派彩（每 $10）。回測「只買位置」用嘅係呢個官方位置派彩，唔係開賽前位置賠率去估。</li>
-              <li>而家表入面舊日子係<strong class="text-amber-200">示範假數據</strong>。第一次抄到真實馬會賠率／賽果嗰下，程式會<strong class="text-gold-300">刪晒全部示範列</strong>，之後回測只睇真實紀錄。</li>
-            </ol>
-            <details class="mt-4 text-xs leading-relaxed text-slate-400">
-              <summary class="cursor-pointer text-gold-300">技術細節：點樣向馬會拎賠率（唔係亂填）</summary>
-              <p class="mt-2">第一步問今日有冇賽：向 <span class="mono text-slate-300">https://info.cld.hkjc.com/graphql/base/</span> 送馬會網頁用緊嗰條 GraphQL（raceMeetings）。只接受沙田 ST／跑馬地 HV。</p>
-              <p class="mt-2">第二步攞中文馬名：同一條 GraphQL 入面 runners 嘅 <span class="mono">name_ch</span>。</p>
-              <p class="mt-2">第三步攞賠率：再問同一端點，參數 <span class="mono">oddsTypes: [WIN, PLA]</span>。馬會回兩個 pool：<span class="mono">oddsType=WIN</span> 嘅 nodes 寫入 <span class="mono">win_odds</span>；<span class="mono">oddsType=PLA</span> 寫入 <span class="mono">place_odds</span>。每隻馬用馬號（combString）對應，唔會把位置當獨贏。</p>
-              <p class="mt-2">如果 GraphQL 暫時唔得，後備係馬會舊 JSON：<span class="mono">https://bet.hkjc.com/racing/getJSON.aspx?type=winplaodds&amp;date=年-月-日&amp;venue=ST或HV&amp;start=場次&amp;end=場次</span>。回覆字串用 <span class="mono">#</span> 切開：前半 <span class="mono">WIN;馬號=賠率=…</span>，後半 <span class="mono">PLA;馬號=賠率=…</span>。同樣分兩欄存放。</p>
-              <p class="mt-2">示範數據由 <span class="mono">scripts/generate_sample_data.py</span> 產生，只用來填滿表格；真賽日唔會用呢個產生器，而會跑上面兩條馬會通道。</p>
-            </details>
+          <article class="overflow-hidden rounded-2xl border border-white/10">
+            <div class="space-y-2 border-b border-white/10 bg-ink-900 px-4 py-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" id="src-win" class="chip-on cursor-pointer rounded-lg border border-white/10 px-3 py-1 text-xs">獨贏賠率</button>
+                <button type="button" id="src-place" class="cursor-pointer rounded-lg border border-white/10 px-3 py-1 text-xs text-slate-400">位置賠率</button>
+                <button type="button" id="src-results" class="cursor-pointer rounded-lg border border-white/10 px-3 py-1 text-xs text-slate-400">賽果派彩</button>
+                <select id="filter-date" class="field max-w-[10rem] text-xs"></select>
+                <select id="filter-venue" class="field max-w-[9rem] text-xs">
+                  <option value="">全部場地</option>
+                  <option value="ST">沙田 ST</option>
+                  <option value="HV">跑馬地 HV</option>
+                </select>
+                <select id="filter-race" class="field max-w-[8rem] text-xs"></select>
+                <input id="filter-horse" class="field max-w-[7rem] text-xs" placeholder="馬號" />
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-[11px] uppercase tracking-[0.16em] text-slate-500">篩選</span>
+                <label class="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-300">
+                  <input id="filter-brown" type="checkbox" class="accent-amber-600" /> 只看啡格
+                </label>
+                <label class="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-300">
+                  <input id="filter-brown-t1" type="checkbox" class="accent-amber-600" /> 只看開賽1分鐘前出現啡格
+                </label>
+                <label class="inline-flex items-center gap-2 rounded-lg border border-gold-500/50 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300">
+                  <input id="filter-strategy" type="checkbox" class="accent-amber-600" /> 只看符合策略
+                </label>
+                <span id="filter-strategy-hint" class="text-[11px] text-slate-500">跟策略回測頁而家嘅設定</span>
+                <span id="table-meta" class="ml-auto text-[11px] text-slate-500"></span>
+              </div>
+            </div>
+            <p id="board-legend" class="border-b border-white/5 bg-ink-900 px-4 py-2 text-[11px] text-slate-500">呢張表淨係<strong class="text-slate-300">獨贏賠率</strong>（馬會 WIN 彩池）。開賽前 1 分鐘啡格係同開賽前 5 分鐘比。</p>
+            <div class="max-h-[560px] overflow-auto">
+              <table class="grid-table">
+                <thead id="data-head"></thead>
+                <tbody id="data-body"></tbody>
+              </table>
+            </div>
+            <div class="flex items-center justify-end gap-2 border-t border-white/10 px-4 py-2 text-xs">
+              <button id="page-prev" class="btn-ghost rounded px-2 py-1">上一頁</button>
+              <span id="page-indicator" class="mono text-slate-400">1 / 1</span>
+              <button id="page-next" class="btn-ghost rounded px-2 py-1">下一頁</button>
+            </div>
           </article>
           <div class="grid gap-4 lg:grid-cols-3">
             <article class="kpi-card lg:col-span-2">
@@ -116,40 +141,23 @@
               </div>
             </article>
           </div>
-
-          <article class="overflow-hidden rounded-2xl border border-white/10">
-            <div class="flex flex-wrap items-center gap-2 border-b border-white/10 bg-ink-900 px-4 py-3">
-              <button type="button" id="src-win" class="chip-on cursor-pointer rounded-lg border border-white/10 px-3 py-1 text-xs">獨贏賠率</button>
-              <button type="button" id="src-place" class="cursor-pointer rounded-lg border border-white/10 px-3 py-1 text-xs text-slate-400">位置賠率</button>
-              <button type="button" id="src-results" class="cursor-pointer rounded-lg border border-white/10 px-3 py-1 text-xs text-slate-400">賽果派彩</button>
-              <select id="filter-date" class="field max-w-[10rem] text-xs"></select>
-              <select id="filter-venue" class="field max-w-[9rem] text-xs">
-                <option value="">全部場地</option>
-                <option value="ST">沙田 ST</option>
-                <option value="HV">跑馬地 HV</option>
-              </select>
-              <select id="filter-race" class="field max-w-[8rem] text-xs"></select>
-              <input id="filter-horse" class="field max-w-[7rem] text-xs" placeholder="馬號" />
-              <label class="flex items-center gap-2 text-xs text-slate-400">
-                <input id="filter-brown" type="checkbox" class="accent-amber-600" /> 只看啡格
-              </label>
-              <label class="flex items-center gap-2 text-xs text-slate-400">
-                <input id="filter-brown-t1" type="checkbox" class="accent-amber-600" /> 只看開賽1分鐘前出現啡格
-              </label>
-              <span id="table-meta" class="ml-auto text-[11px] text-slate-500"></span>
-            </div>
-            <p id="board-legend" class="border-b border-white/5 bg-ink-900 px-4 py-2 text-[11px] text-slate-500">呢張表淨係<strong class="text-slate-300">獨贏賠率</strong>（馬會 WIN 彩池）。開賽前 1 分鐘啡格係同開賽前 5 分鐘比。</p>
-            <div class="max-h-[560px] overflow-auto">
-              <table class="grid-table">
-                <thead id="data-head"></thead>
-                <tbody id="data-body"></tbody>
-              </table>
-            </div>
-            <div class="flex items-center justify-end gap-2 border-t border-white/10 px-4 py-2 text-xs">
-              <button id="page-prev" class="btn-ghost rounded px-2 py-1">上一頁</button>
-              <span id="page-indicator" class="mono text-slate-400">1 / 1</span>
-              <button id="page-next" class="btn-ghost rounded px-2 py-1">下一頁</button>
-            </div>
+          <article class="kpi-card">
+            <h2 class="text-sm font-semibold text-gold-300">點樣收錄數據（用日常說話講）</h2>
+            <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-slate-300">
+              <li>系統全日每隔大約半個鐘問馬會：「今日沙田或者跑馬地有冇賽馬？第一場幾點開跑？」冇就收工。有就跟<strong class="text-gold-300">當日官方第一場開跑時間</strong>倒數，唔係寫死 11:00／17:30。</li>
+              <li>開跑前 15、10、5、1 分鐘同開跑嗰下，分別向馬會問<strong class="text-gold-300">兩個獨立彩池</strong>：獨贏（WIN）同位置（PLA）。兩個數字分開寫入兩欄，唔會撈亂。唔再抄開賽前 3 分鐘。</li>
+              <li>獨贏啡格：呢個鐘點嘅<strong class="text-gold-300">獨贏</strong>比起<strong class="text-gold-300">上一個鐘點（大約 5 分鐘前）</strong>平咗一半或以上。例如開賽前 1 分鐘同開賽前 5 分鐘比。位置表用同樣方法睇位置急跌，但策略／通知預設仍然用獨贏啡格做訊號。</li>
+              <li>賽事完咗再抄官方名次、獨贏派彩、位置派彩（每 $10）。回測「只買位置」用嘅係呢個官方位置派彩，唔係開賽前位置賠率去估。</li>
+              <li>而家表入面舊日子係<strong class="text-amber-200">示範假數據</strong>。第一次抄到真實馬會賠率／賽果嗰下，程式會<strong class="text-gold-300">刪晒全部示範列</strong>，之後回測只睇真實紀錄。</li>
+            </ol>
+            <details class="mt-4 text-xs leading-relaxed text-slate-400">
+              <summary class="cursor-pointer text-gold-300">技術細節：點樣向馬會拎賠率（唔係亂填）</summary>
+              <p class="mt-2">第一步問今日有冇賽：向 <span class="mono text-slate-300">https://info.cld.hkjc.com/graphql/base/</span> 送馬會網頁用緊嗰條 GraphQL（raceMeetings）。只接受沙田 ST／跑馬地 HV。</p>
+              <p class="mt-2">第二步攞中文馬名：同一條 GraphQL 入面 runners 嘅 <span class="mono">name_ch</span>。</p>
+              <p class="mt-2">第三步攞賠率：再問同一端點，參數 <span class="mono">oddsTypes: [WIN, PLA]</span>。馬會回兩個 pool：<span class="mono">oddsType=WIN</span> 嘅 nodes 寫入 <span class="mono">win_odds</span>；<span class="mono">oddsType=PLA</span> 寫入 <span class="mono">place_odds</span>。每隻馬用馬號（combString）對應，唔會把位置當獨贏。</p>
+              <p class="mt-2">如果 GraphQL 暫時唔得，後備係馬會舊 JSON：<span class="mono">https://bet.hkjc.com/racing/getJSON.aspx?type=winplaodds&amp;date=年-月-日&amp;venue=ST或HV&amp;start=場次&amp;end=場次</span>。回覆字串用 <span class="mono">#</span> 切開：前半 <span class="mono">WIN;馬號=賠率=…</span>，後半 <span class="mono">PLA;馬號=賠率=…</span>。同樣分兩欄存放。</p>
+              <p class="mt-2">示範數據由 <span class="mono">scripts/generate_sample_data.py</span> 產生，只用來填滿表格；真賽日唔會用呢個產生器，而會跑上面兩條馬會通道。</p>
+            </details>
           </article>
         </section>
 
@@ -414,7 +422,7 @@
 <ul>
 <li>睇 Telegram，唔使盯住網站</li>
 <li>想核對就開 <strong>數據中心</strong>，撳「重新載入數據」</li>
-<li>用 filter「只看開賽1分鐘前出現啡格」</li>
+<li>用 filter「只看符合策略」（跟策略回測頁而家嘅時間點、獨贏範圍、啡格門檻）或者「只看開賽1分鐘前出現啡格」</li>
 </ul>
 <h3>賽事進行中</h3>
 <p>網站唔會替你落飛。警報只係話「呢隻馬喺你定嘅規則下出現啡格」。你自己決定買獨贏、位置定兩者。</p>
@@ -438,7 +446,8 @@
 <li><strong>獨贏賠率 / 位置賠率</strong>：一隻馬一行，欄位係開賽前 15／10／5／1 分鐘同開跑。啡色格 = 較上一個時間點（大約 5 分鐘前）跌 ≥ 門檻。</li>
 <li><strong>只看啡格</strong>：任何時間點獨贏急跌。獨贏、位置、賽果派彩三張表都可以用。</li>
 <li><strong>只看開賽1分鐘前出現啡格</strong>：淨 T-1 對 T-5 獨贏急跌。賽果派彩表同樣適用，方便你對照嗰批馬最後派咗幾多。</li>
-<li><strong>賽果派彩</strong>：官方名次同每 $10 派彩。開住啡格 filter 就只顯示對應嗰啲馬。</li>
+<li><strong>只看符合策略</strong>：跟<strong>策略回測</strong>頁而家嘅設定揀馬（選定時間點嘅獨贏啡格 ∩ 獨贏賠率範圍 ∩ 啡格門檻）。獨贏、位置、賽果三張表都係同一批馬。投注方法只影響回測點計錢，唔影響呢個 filter。</li>
+<li><strong>賽果派彩</strong>：官方名次同每 $10 派彩。開住啡格或者策略 filter 就只顯示對應嗰啲馬。</li>
 <li><strong>單次快照 / 收取賽果</strong>：排程失手或者想即刻補數先用。</li>
 </ul>
 <h3>策略回測 · 蒙地卡羅</h3>
@@ -677,8 +686,8 @@ scraper_runner.py auto
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <script src="./assets/core.js?v=20261116h"></script>
-  <script src="./assets/engine.js?v=20261116h"></script>
-  <script src="./assets/app.js?v=20261116h"></script>
+  <script src="./assets/core.js?v=20261116j"></script>
+  <script src="./assets/engine.js?v=20261116j"></script>
+  <script src="./assets/app.js?v=20261116j"></script>
 </body>
 </html>

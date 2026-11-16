@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.backtest import evaluate, payout_odds, race_day_count, scale_unit_pnl, ticket_pnl, yearly_bets
+from src.backtest import evaluate, payout_odds, race_day_count, scale_unit_pnl, ticket_pnl, trigger_rows, yearly_bets
 from src.csv_store import load_odds, load_results
 from src.hkjc_client import HKJCClient, Meeting
 from src.monitor import plan_auto, restore_monitor_state, should_handoff
@@ -61,6 +61,50 @@ def test_backtest_on_sample():
     assert days >= 1
     assert stats["race_days"] == days
     assert stats["triggers_per_race_day"] == round(stats["triggers"] / days, 2)
+
+
+def test_strategy_filter_matches_backtest_triggers():
+    """Data-center 「只看符合策略」 uses the same horse set as strategy-tab trigger_rows."""
+    odds = load_odds()
+    results = load_results()
+    trigs = trigger_rows(odds, 3.5, 9.0, 50, "T-1")
+    assert trigs, "sample data should have at least one strategy match"
+    keys = {
+        (r["race_date"], r["venue"], str(r["race_no"]), str(r["horse_no"]))
+        for r in trigs
+    }
+    for row in trigs:
+        assert str(row.get("checkpoint")) == "T-1"
+        win = float(row["win_odds"])
+        assert 3.5 <= win <= 9.0
+        drop = float(row.get("win_drop_pct") or 0)
+        brown = str(row.get("is_brown_grid")).lower() == "true" or drop >= 50
+        assert brown
+    stats = evaluate(
+        odds, results, min_odds=3.5, max_odds=9.0, bet_type="win", stake=10, threshold=50, checkpoint="T-1"
+    )
+    trade_keys = {
+        (t["race_date"], t["venue"], str(t["race_no"]), str(t["horse_no"]))
+        for t in stats["trades"]
+    }
+    assert trade_keys <= keys
+    place_stats = evaluate(
+        odds, results, min_odds=3.5, max_odds=9.0, bet_type="place", stake=10, threshold=50, checkpoint="T-1"
+    )
+    place_keys = {
+        (t["race_date"], t["venue"], str(t["race_no"]), str(t["horse_no"]))
+        for t in place_stats["trades"]
+    }
+    assert place_keys == trade_keys
+    board = pivot_odds(odds, 50, pool="win")
+    matched = [
+        r
+        for r in board
+        if (r["race_date"], r["venue"], str(r["race_no"]), str(r["horse_no"])) in keys
+    ]
+    assert len(matched) == len(keys)
+    wider = trigger_rows(odds, 1.1, 50.0, 50, "T-1")
+    assert len(wider) >= len(trigs)
 
 
 def test_odds_board_one_row_per_horse():
