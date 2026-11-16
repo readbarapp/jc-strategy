@@ -26,10 +26,16 @@ def trigger_rows(
     min_odds: float,
     max_odds: float,
     threshold: float,
+    checkpoint: str = "T-1",
 ) -> list[dict]:
-    """Latest-per-horse trigger: brown-grid (or live drop) inside the odds band."""
+    """Bet only if 啡格 appears at the chosen checkpoint and that tick's odds are in range."""
+    wanted = (checkpoint or "T-1").strip().upper()
+    if wanted.isdigit():
+        wanted = f"T-{wanted}"
     best: dict[tuple, dict] = {}
     for row in odds:
+        if str(row.get("checkpoint") or "").upper() != wanted:
+            continue
         win = parse_odds(row.get("win_odds"))
         drop = float(row.get("win_drop_pct") or 0)
         brown = _truthy(row.get("is_brown_grid")) or drop >= threshold
@@ -38,10 +44,9 @@ def trigger_rows(
         if not (min_odds <= win <= max_odds):
             continue
         key = (row.get("race_date"), row.get("venue"), str(row.get("race_no")), str(row.get("horse_no")))
-        prev = best.get(key)
-        if prev is None or drop >= float(prev.get("win_drop_pct") or 0):
-            best[key] = dict(row)
-            best[key]["win_odds"] = win
+        item = dict(row)
+        item["win_odds"] = win
+        best[key] = item
     return list(best.values())
 
 
@@ -53,6 +58,7 @@ def evaluate(
     bet_type: str = "win",
     stake: float = 10.0,
     threshold: float = 50.0,
+    checkpoint: str = "T-1",
 ) -> dict:
     result_map = {
         (r["race_date"], r["venue"], str(r["race_no"]), str(r["horse_no"])): r
@@ -64,7 +70,7 @@ def evaluate(
         field_sizes[key] = field_sizes.get(key, 0) + 1
 
     trades = []
-    for trig in trigger_rows(odds, min_odds, max_odds, threshold):
+    for trig in trigger_rows(odds, min_odds, max_odds, threshold, checkpoint):
         key = (trig["race_date"], trig["venue"], str(trig["race_no"]), str(trig["horse_no"]))
         res = result_map.get(key)
         if not res:

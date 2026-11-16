@@ -137,6 +137,7 @@
     $("min-odds-val").textContent = Number($("min-odds").value).toFixed(1);
     $("max-odds-val").textContent = Number($("max-odds").value).toFixed(1);
     $("bet-type").value = s.bet_type || "win";
+    $("checkpoint").value = s.checkpoint || "T-1";
     $("mc-bankroll").value = m.initial_bankroll ?? 10000;
     $("mc-stake").value = m.stake ?? 10;
     $("mc-races").value = m.races_per_year ?? 400;
@@ -279,17 +280,20 @@
     const minOdds = num($("min-odds").value, 3.5);
     const maxOdds = num($("max-odds").value, 9.0);
     const betType = $("bet-type").value;
+    const checkpoint = $("checkpoint").value || "T-1";
     const bt = evaluate(state.odds, state.results, {
       minOdds: Math.min(minOdds, maxOdds),
       maxOdds: Math.max(minOdds, maxOdds),
       betType,
+      checkpoint,
       stake: 10,
       threshold: currentThreshold(),
     });
     state.backtest = bt;
     const tone = bt.roi >= 0 ? "up" : "down";
+    const whenLabel = ($("checkpoint").selectedOptions[0] && $("checkpoint").selectedOptions[0].text) || checkpoint;
     $("bt-kpis").innerHTML = [
-      kpi("t", "總觸發次數", bt.triggers, "啡格 ∩ 賠率區間"),
+      kpi("t", "總觸發次數", bt.triggers, `${whenLabel} 啡格 ∩ 賠率範圍`),
       kpi("w", "策略勝率", bt.win_rate.toFixed(2) + "%", `${bt.hits} 次命中`),
       kpi("p", "平均命中派彩賠率", bt.avg_payout_odds.toFixed(2), "中獎注的 dividend / $10"),
       kpi("s", "總投入本金", "$" + bt.staked.toFixed(0), "每注 $10"),
@@ -421,6 +425,7 @@
     cfg.strategy.min_odds = num($("min-odds").value, 3.5);
     cfg.strategy.max_odds = num($("max-odds").value, 9.0);
     cfg.strategy.bet_type = $("bet-type").value;
+    cfg.strategy.checkpoint = $("checkpoint").value || "T-1";
     cfg.monte_carlo.initial_bankroll = num($("mc-bankroll").value, 10000);
     cfg.monte_carlo.stake = num($("mc-stake").value, 10);
     cfg.monte_carlo.races_per_year = num($("mc-races").value, 400);
@@ -518,7 +523,7 @@
       $("max-odds-val").textContent = Number($("max-odds").value).toFixed(1);
       runStrategy();
     });
-    ["bet-type", "mc-bankroll", "mc-stake", "mc-races", "mc-sims"].forEach((id) => {
+    ["bet-type", "checkpoint", "mc-bankroll", "mc-stake", "mc-races", "mc-sims"].forEach((id) => {
       $(id).addEventListener("change", runStrategy);
       $(id).addEventListener("input", runStrategy);
     });
