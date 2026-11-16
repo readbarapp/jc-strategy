@@ -594,12 +594,20 @@ class HKJCClient:
         win_map: dict[int, float | None] = {}
         pla_map: dict[int, float | None] = {}
         for pool in pools:
-            target = win_map if pool.get("oddsType") == "WIN" else pla_map
+            odds_type = str(pool.get("oddsType") or "").upper()
+            if odds_type == "WIN":
+                target = win_map
+            elif odds_type == "PLA":
+                target = pla_map
+            else:
+                continue
             for node in pool.get("oddsNodes") or []:
                 comb = str(node.get("combString") or "").strip()
                 if not re.fullmatch(r"\d{1,2}", comb):
                     continue
                 target[int(comb)] = parse_odds(node.get("oddsValue"))
+        if not win_map and not pla_map:
+            return []
         race = meeting.race(race_no)
         names = race.runners if race else {}
         numbers = sorted(set(win_map) | set(pla_map) | set(names))

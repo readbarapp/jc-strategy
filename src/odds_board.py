@@ -1,4 +1,4 @@
-"""Pivot checkpoint snapshots into one row per horse."""
+"""Pivot checkpoint snapshots into one row per horse, separately for WIN and PLACE."""
 
 from __future__ import annotations
 
@@ -14,18 +14,19 @@ CP_SUFFIX = {
     "T-0": "t0",
 }
 WIDE_FIELDS = [
+    "pool",
     "race_date",
     "venue",
     "race_no",
     "scheduled_time",
     "horse_no",
     "horse_name",
-    "win_t15",
-    "win_t10",
-    "win_t5",
-    "win_t3",
-    "win_t1",
-    "win_t0",
+    "odds_t15",
+    "odds_t10",
+    "odds_t5",
+    "odds_t3",
+    "odds_t1",
+    "odds_t0",
     "drop_t10",
     "drop_t5",
     "drop_t3",
@@ -39,35 +40,12 @@ WIDE_FIELDS = [
     "is_brown_grid",
     "brown_at",
 ]
-WIDE_EXPORT_HEADERS = [
-    "日期",
-    "場地",
-    "場次",
-    "開跑時間",
-    "馬號",
-    "馬名",
-    "開賽前15分鐘",
-    "開賽前10分鐘",
-    "開賽前5分鐘",
-    "開賽前3分鐘",
-    "開賽前1分鐘",
-    "開跑",
-    "T-10跌幅%",
-    "T-5跌幅%",
-    "T-3跌幅%",
-    "T-1跌幅%",
-    "開跑跌幅%",
-    "T-10啡格",
-    "T-5啡格",
-    "T-3啡格",
-    "T-1啡格",
-    "開跑啡格",
-    "是否啡格",
-    "啡格時間點",
-]
 
 
-def pivot_odds(rows: list[dict], threshold: float = 50.0) -> list[dict]:
+def pivot_odds(rows: list[dict], threshold: float = 50.0, pool: str = "win") -> list[dict]:
+    """One row per horse. pool='win' uses win_odds; pool='place' uses place_odds."""
+    field = "place_odds" if pool == "place" else "win_odds"
+    pool_label = "PLA" if pool == "place" else "WIN"
     grouped: dict[tuple, dict] = {}
     for row in rows:
         cp = str(row.get("checkpoint") or "")
@@ -95,11 +73,12 @@ def pivot_odds(rows: list[dict], threshold: float = 50.0) -> list[dict]:
             item["horse_name"] = row.get("horse_name")
         if row.get("scheduled_time"):
             item["scheduled_time"] = row.get("scheduled_time")
-        item["odds"][cp] = parse_odds(row.get("win_odds"))
+        item["odds"][cp] = parse_odds(row.get(field))
 
     wide: list[dict] = []
     for item in grouped.values():
         out = {
+            "pool": pool_label,
             "race_date": item["race_date"],
             "venue": item["venue"],
             "race_no": item["race_no"],
@@ -112,7 +91,7 @@ def pivot_odds(rows: list[dict], threshold: float = 50.0) -> list[dict]:
         for cp in CHECKPOINTS:
             suffix = CP_SUFFIX[cp]
             current = item["odds"].get(cp)
-            out[f"win_{suffix}"] = "" if current is None else current
+            out[f"odds_{suffix}"] = "" if current is None else current
             if prev_cp is None:
                 prev_cp = cp
                 continue

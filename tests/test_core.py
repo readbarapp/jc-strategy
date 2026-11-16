@@ -8,8 +8,10 @@ sys.path.insert(0, str(ROOT))
 
 from src.backtest import evaluate
 from src.csv_store import load_odds, load_results
+from src.hkjc_client import HKJCClient
 from src.odds_board import pivot_odds
 from src.odds_math import is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
+from src.telegram_notify import format_alert, should_alert
 from src.timeutil import HK_TZ, format_hk, parse_hk
 
 
@@ -58,12 +60,29 @@ def test_backtest_on_sample():
 
 def test_odds_board_one_row_per_horse():
     odds = load_odds()
-    board = pivot_odds(odds, 50)
+    board = pivot_odds(odds, 50, pool="win")
     keys = {(r["race_date"], r["venue"], str(r["race_no"]), str(r["horse_no"])) for r in odds}
     assert len(board) == len(keys)
     sample = next(r for r in board if r["is_brown_grid"] == "true")
     assert sample["brown_at"]
-    assert sample["win_t15"] != "" or sample["win_t10"] != ""
+    assert sample["pool"] == "WIN"
+    assert sample["odds_t15"] != "" or sample["odds_t10"] != ""
+
+
+def test_win_and_place_boards_are_separate():
+    odds = load_odds()
+    win_board = pivot_odds(odds, 50, pool="win")
+    place_board = pivot_odds(odds, 50, pool="place")
+    assert len(win_board) == len(place_board)
+    assert all(r["pool"] == "WIN" for r in win_board)
+    assert all(r["pool"] == "PLA" for r in place_board)
+    differed = False
+    for w, p in zip(win_board, place_board):
+        assert (w["race_date"], w["horse_no"]) == (p["race_date"], p["horse_no"])
+        if w["odds_t1"] != "" and p["odds_t1"] != "" and float(w["odds_t1"]) != float(p["odds_t1"]):
+            differed = True
+            break
+    assert differed, "place odds must not be a copy of win odds"
 
 
 def test_t1_strategy_ignores_other_checkpoints():
@@ -127,11 +146,102 @@ def test_t1_strategy_ignores_other_checkpoints():
     assert stats["trades"][0]["horse_no"] == "3"
 
 
+def test_place_and_win_place_use_official_dividends_not_win_odds():
+    odds = [
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "1",
+            "checkpoint": "T-1",
+            "horse_no": "3",
+            "horse_name": "金程千里",
+            "win_odds": 6.0,
+            "place_odds": 1.8,
+            "win_drop_pct": 55,
+            "is_brown_grid": "true",
+        }
+    ]
+    results = [
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "1",
+            "horse_no": "3",
+            "finish_rank": 2,
+            "win_dividend": 0,
+            "placedividend": 22.0,
+        }
+    ]
+    place = evaluate(odds, results, bet_type="place", checkpoint="T-1", threshold=50)
+    assert place["triggers"] == 1
+    assert place["pnl"] == 12.0  # 22 - 10; never uses 6.0 win odds
+    win_only = evaluate(odds, results, bet_type="win", checkpoint="T-1", threshold=50)
+    assert win_only["pnl"] == -10.0
+    both = evaluate(odds, results, bet_type="win_place", checkpoint="T-1", threshold=50)
+    assert both["staked"] == 20
+    assert both["pnl"] == 2.0  # -10 win + 12 place
+
+
+def test_winplaodds_string_keeps_pools_apart():
+    win_map: dict[int, float | None] = {}
+    pla_map: dict[int, float | None] = {}
+    text = "WIN;1=8.4=0;2=3.5=0#PLA;1=2.1=0;2=1.4=0"
+    win_part, _, pla_part = text.partition("#")
+    HKJCClient._parse_pool_segment(win_part, win_map)
+    HKJCClient._parse_pool_segment(pla_part, pla_map)
+    assert win_map == {1: 8.4, 2: 3.5}
+    assert pla_map == {1: 2.1, 2: 1.4}
+
+
+def test_telegram_uses_own_checkpoint_odds_and_bet_label():
+    cfg = {
+        "telegram": {
+            "enabled": True,
+            "bot_token": "x",
+            "chat_id": "1",
+            "bet_type": "place",
+            "checkpoint": "T-1",
+            "min_odds": 3.5,
+            "max_odds": 9.0,
+            "min_drop_pct": 50,
+        }
+    }
+    hit = {
+        "checkpoint": "T-1",
+        "win_odds": 4.2,
+        "place_odds": 1.7,
+        "win_drop_pct": 55,
+        "is_brown_grid": "true",
+        "venue": "ST",
+        "race_no": 5,
+        "horse_no": 7,
+        "horse_name": "金程千里",
+        "prev_win_odds": 9.4,
+        "race_date": "2026-11-15",
+        "scheduled_time": "15:20:00",
+        "capture_timestamp": "2026-11-15 15:19:00",
+    }
+    miss_cp = dict(hit, checkpoint="T-5")
+    miss_odds = dict(hit, win_odds=12.0)
+    assert should_alert(cfg, hit) is True
+    assert should_alert(cfg, miss_cp) is False
+    assert should_alert(cfg, miss_odds) is False
+    text = format_alert(cfg, hit)
+    assert "只買位置" in text
+    assert "T-1" in text
+    assert "4.2" in text
+    assert "1.7" in text
+
+
 if __name__ == "__main__":
     test_timezone_is_hong_kong()
     test_drop_and_brown_grid()
     test_checkpoints()
     test_backtest_on_sample()
     test_odds_board_one_row_per_horse()
+    test_win_and_place_boards_are_separate()
     test_t1_strategy_ignores_other_checkpoints()
+    test_place_and_win_place_use_official_dividends_not_win_odds()
+    test_winplaodds_string_keeps_pools_apart()
+    test_telegram_uses_own_checkpoint_odds_and_bet_label()
     print("all tests ok")

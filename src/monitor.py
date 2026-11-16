@@ -95,8 +95,8 @@ def snapshot_race(
         }
         out.append(row)
         alert_key = (race.race_no, runner.horse_no)
-        if alert_key not in alerted and telegram_notify.should_alert(cfg, win, drop):
-            telegram_notify.send_message(cfg, telegram_notify.format_alert(row))
+        if alert_key not in alerted and telegram_notify.should_alert(cfg, row):
+            telegram_notify.send_message(cfg, telegram_notify.format_alert(cfg, row))
             alerted.add(alert_key)
     return out
 

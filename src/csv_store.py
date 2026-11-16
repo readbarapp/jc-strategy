@@ -15,6 +15,8 @@ DOCS_DATA = ROOT / "docs" / "data"
 ODDS_PATH = DATA_DIR / "odds_snapshots.csv"
 RESULTS_PATH = DATA_DIR / "race_results.csv"
 BOARD_PATH = DATA_DIR / "odds_board.csv"
+WIN_BOARD_PATH = DATA_DIR / "win_board.csv"
+PLACE_BOARD_PATH = DATA_DIR / "place_board.csv"
 
 
 def _ensure(path: Path, fields: list[str]) -> None:
@@ -76,7 +78,12 @@ def upsert(path: Path, fields: list[str], incoming: list[dict], key_fn) -> int:
 
 
 def rebuild_odds_board(threshold: float = 50.0) -> None:
-    write_rows(BOARD_PATH, WIDE_FIELDS, pivot_odds(load_odds(), threshold))
+    snapshots = load_odds()
+    win_rows = pivot_odds(snapshots, threshold, pool="win")
+    place_rows = pivot_odds(snapshots, threshold, pool="place")
+    write_rows(WIN_BOARD_PATH, WIDE_FIELDS, win_rows)
+    write_rows(PLACE_BOARD_PATH, WIDE_FIELDS, place_rows)
+    write_rows(BOARD_PATH, WIDE_FIELDS, win_rows)
 
 
 def upsert_odds(rows: list[dict]) -> int:
@@ -102,6 +109,8 @@ def copy_to_docs() -> None:
     mapping = [
         (ODDS_PATH, DOCS_DATA / "odds_snapshots.csv"),
         (BOARD_PATH, DOCS_DATA / "odds_board.csv"),
+        (WIN_BOARD_PATH, DOCS_DATA / "win_board.csv"),
+        (PLACE_BOARD_PATH, DOCS_DATA / "place_board.csv"),
         (RESULTS_PATH, DOCS_DATA / "race_results.csv"),
         (ROOT / "config.json", ROOT / "docs" / "config.json"),
         (ROOT / "status.json", ROOT / "docs" / "status.json"),
