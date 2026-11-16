@@ -253,6 +253,121 @@
     return String(v).toLowerCase() === "true" || v === "1" || v === true;
   }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function inlineFmt(text) {
+    return escapeHtml(text)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  }
+
+  function renderMarkdown(md) {
+    const lines = String(md || "").replace(/\r\n/g, "\n").split("\n");
+    const out = [];
+    let i = 0;
+    let inCode = false;
+    const code = [];
+    let listType = null;
+
+    function flushList() {
+      if (!listType) return;
+      out.push(listType === "ol" ? "</ol>" : "</ul>");
+      listType = null;
+    }
+
+    while (i < lines.length) {
+      const line = lines[i];
+      if (line.startsWith("```")) {
+        if (inCode) {
+          out.push("<pre><code>" + escapeHtml(code.join("\n")) + "</code></pre>");
+          code.length = 0;
+          inCode = false;
+        } else {
+          flushList();
+          inCode = true;
+        }
+        i += 1;
+        continue;
+      }
+      if (inCode) {
+        code.push(line);
+        i += 1;
+        continue;
+      }
+      if (!line.trim()) {
+        flushList();
+        i += 1;
+        continue;
+      }
+      if (line.startsWith("|")) {
+        flushList();
+        const rows = [];
+        while (i < lines.length && lines[i].startsWith("|")) {
+          rows.push(lines[i].split("|").slice(1, -1).map((c) => c.trim()));
+          i += 1;
+        }
+        if (!rows.length) continue;
+        const header = rows[0];
+        const body = rows.slice(1).filter((r) => !r.every((c) => /^:?-+:?$/.test(c)));
+        out.push(
+          "<table><thead><tr>" +
+            header.map((h) => "<th>" + inlineFmt(h) + "</th>").join("") +
+            "</tr></thead><tbody>" +
+            body.map((r) => "<tr>" + r.map((c) => "<td>" + inlineFmt(c) + "</td>").join("") + "</tr>").join("") +
+            "</tbody></table>"
+        );
+        continue;
+      }
+      if (/^---+$/.test(line.trim())) {
+        flushList();
+        out.push("<hr />");
+        i += 1;
+        continue;
+      }
+      const heading = /^(#{1,3})\s+(.*)$/.exec(line);
+      if (heading) {
+        flushList();
+        const level = heading[1].length;
+        out.push("<h" + level + ">" + inlineFmt(heading[2]) + "</h" + level + ">");
+        i += 1;
+        continue;
+      }
+      const ul = /^[-*]\s+(.*)$/.exec(line);
+      if (ul) {
+        if (listType !== "ul") {
+          flushList();
+          out.push("<ul>");
+          listType = "ul";
+        }
+        out.push("<li>" + inlineFmt(ul[1]) + "</li>");
+        i += 1;
+        continue;
+      }
+      const ol = /^\d+\.\s+(.*)$/.exec(line);
+      if (ol) {
+        if (listType !== "ol") {
+          flushList();
+          out.push("<ol>");
+          listType = "ol";
+        }
+        out.push("<li>" + inlineFmt(ol[1]) + "</li>");
+        i += 1;
+        continue;
+      }
+      flushList();
+      out.push("<p>" + inlineFmt(line) + "</p>");
+      i += 1;
+    }
+    flushList();
+    if (inCode) out.push("<pre><code>" + escapeHtml(code.join("\n")) + "</code></pre>");
+    return out.join("\n");
+  }
+
   global.HKJC = {
     TZ,
     formatHk,
@@ -270,5 +385,6 @@
     ghLatestRun,
     num,
     isTrue,
+    renderMarkdown,
   };
 })(window);
