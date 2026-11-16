@@ -1,6 +1,6 @@
 {
   "state": "idle",
-  "hk_time": "2026-11-16 14:16:11",
+  "hk_time": "2026-11-16 15:22:44",
   "is_race_day": false,
   "venue": "",
   "race_date": "2026-11-16",
@@ -9,5 +9,5 @@
   "last_message": "無賽果可收",
   "workflow": "hkjc_monitor",
   "error": "",
-  "updated_at": "2026-11-16T14:16:11+08:00"
+  "updated_at": "2026-11-16T15:22:44+08:00"
 }
