@@ -1,0 +1,188 @@
+<h1>資料收集、分析同警報：技術說明</h1>
+<p>呢份講程式 <strong>實際去邊、抄邊格、點計、點推播</strong>。對應程式：<code>src/hkjc_client.py</code>（拎數）、<code>src/monitor.py</code>（時間同寫入）、<code>src/odds_math.py</code>（啡格）、<code>src/backtest.py</code> 同 <code>docs/assets/engine.js</code>（分析）、<code>src/telegram_notify.py</code>（警報）。</p>
+<p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。</p>
+<hr />
+<h2>一、整體流程</h2>
+<pre><code>GitHub Actions（香港時間 11:00 / 17:30 / 00:20，或你人手觸發）
+        │
+        ▼
+scraper_runner.py auto
+        │
+        ├─ 問：今日沙田或跑馬地有冇賽？
+        │     冇 → 嘗試收昨日／完場賽果 → 收工
+        │     有、未開跑 → 等到第一場前 20 分鐘
+        │     有、賽日進行中 → 高頻抄賠率
+        │     有、全部完咗 → 抄官方賽果
+        │
+        ├─ 每個時間點：GraphQL 獨贏+位置（失敗改 getJSON）
+        ├─ 計啡格（對上一個時間點，T-1 對 T-5）
+        ├─ 符合 Telegram 規則 → Bot API 即刻 sendMessage
+        ├─ 寫入 data/*.csv，大約每 120 秒 git push
+        └─ 鏡像到 docs/ 畀 GitHub Pages 顯示</code></pre>
+<p>瀏覽器 <strong>唔會</strong> 自己去馬會網站爬。你開網站只係讀 repo 入面已經寫好嘅 CSV。真正 crawl 只發生喺 GitHub Actions 嘅 Ubuntu runner。</p>
+<hr />
+<h2>二、去邊個網站、抄邊啲欄</h2>
+<p>全部只讀馬會 <strong>公開</strong> 接口，User-Agent 扮普通 Chrome，<code>Origin</code> / <code>Referer</code> 寫 <code>https://bet.hkjc.com/racing</code>（同官方投注頁一致）。GraphQL query 係馬會網頁用緊嗰條 <strong>whitelist</strong>；改字段會回 <code>WHITELIST_ERROR</code>，所以程式係原句送出，唔係自己發明 query。</p>
+<h3>1. 今日有冇賽、場次、中文馬名</h3>
+<table><thead><tr><th></th><th></th></tr></thead><tbody>
+<tr><td>網址</td><td><code>POST https://info.cld.hkjc.com/graphql/base/</code></td></tr>
+<tr><td>Query 名</td><td><code>raceMeetings</code>（<code>QUERY_RACE_MEETINGS_FULL</code>）</td></tr>
+<tr><td>參數</td><td><code>date</code> = 香港日期 <code>YYYY-MM-DD</code>，<code>venueCode</code> = <code>ST</code> 或 <code>HV</code></td></tr>
+<tr><td>先試</td><td>沙田，冇 races 再試跑馬地</td></tr>
+</tbody></table>
+<p>從 JSON 拎呢啲格：</p>
+<table><thead><tr><th>JSON 路徑</th><th>用途</th></tr></thead><tbody>
+<tr><td><code>raceMeetings[].venueCode</code></td><td>場地，只接受 <code>ST</code> / <code>HV</code></td></tr>
+<tr><td><code>raceMeetings[].date</code></td><td>賽日</td></tr>
+<tr><td><code>races[].no</code></td><td>第幾場</td></tr>
+<tr><td><code>races[].postTime</code></td><td>開跑時間 → 轉成香港 <code>HH:MM:SS</code></td></tr>
+<tr><td><code>races[].status</code></td><td>賽事狀態</td></tr>
+<tr><td><code>runners[].no</code></td><td>馬號</td></tr>
+<tr><td><code>runners[].name_ch</code></td><td><strong>中文馬名</strong>（優先）</td></tr>
+<tr><td><code>runners[].name_en</code></td><td>冇中文先用</td></tr>
+</tbody></table>
+<p>如果 GraphQL 失敗，後備網頁：</p>
+<table><thead><tr><th></th><th></th></tr></thead><tbody>
+<tr><td>網址</td><td><code>https://racing.hkjc.com/racing/information/Chinese/Racing/Fixture.aspx</code></td></tr>
+<tr><td>抄法</td><td>所有 <code>&lt;a href&gt;</code> 入面 <code>RaceDate=YYYY/MM/DD</code>、`Racecourse=ST</td><td>HV`，或者連結文字有「沙田／Sha Tin」「跑馬地／Happy Valley」</td></tr>
+<tr><td>另一後備</td><td>中文賽果頁 <code>LocalResults.aspx?RaceDate=…&amp;Racecourse=ST&amp;RaceNo=1</code>，用下拉 option 1–14 估有幾場</td></tr>
+</tbody></table>
+<p>海外場地會被丟掉。</p>
+<h3>2. 即時獨贏同位置賠率（主通道）</h3>
+<table><thead><tr><th></th><th></th></tr></thead><tbody>
+<tr><td>網址</td><td>同一個 <code>POST https://info.cld.hkjc.com/graphql/base/</code></td></tr>
+<tr><td>Query 名</td><td><code>racing</code>（<code>QUERY_PM_POOLS_ODDS</code>）</td></tr>
+<tr><td>參數</td><td><code>date</code>、<code>venueCode</code>、<code>raceNo</code>、<code>oddsTypes: [&quot;WIN&quot;, &quot;PLA&quot;]</code></td></tr>
+</tbody></table>
+<p>回覆 <code>raceMeetings[0].pmPools[]</code> 係 <strong>兩個獨立彩池</strong>，唔係一格撈埋：</p>
+<table><thead><tr><th>條件</th><th>抄邊格</th><th>寫入邊欄</th></tr></thead><tbody>
+<tr><td><code>pmPools[].oddsType == &quot;WIN&quot;</code></td><td>每個 <code>oddsNodes[].combString</code>（必須係 1–2 位數字 = 馬號）同 <code>oddsNodes[].oddsValue</code></td><td><code>win_odds</code></td></tr>
+<tr><td><code>pmPools[].oddsType == &quot;PLA&quot;</code></td><td>同樣 <code>combString</code> + <code>oddsValue</code></td><td><code>place_odds</code></td></tr>
+<tr><td>其他 <code>oddsType</code>（QIN、QPL…）</td><td><strong>整池跳過</strong></td><td>唔寫</td></tr>
+</tbody></table>
+<p><code>combString</code> 對唔到馬號格式（例如連贏組合 <code>1-2</code>）會忽略，避免把複式彩當獨贏。</p>
+<p>兩個 map 都空 → 當 GraphQL 失敗，<strong>改走後備</strong>，唔會把空白當真實賠率。馬名用第 1 步已經備好嘅 <code>name_ch</code>。</p>
+<h3>3. 即時賠率後備：舊 JSON</h3>
+<p>官方投注頁沿用嘅接口：</p>
+<pre><code>GET https://bet.hkjc.com/racing/getJSON.aspx
+    ?type=winplaodds
+    &amp;date=YYYY-MM-DD
+    &amp;venue=ST 或 HV
+    &amp;start=場次
+    &amp;end=場次</code></pre>
+<p>回覆 JSON 入面 <code>OUT</code> 係一條字串，典型：</p>
+<pre><code>WIN;1=8.4=0;2=3.5=0;3=12=1#PLA;1=2.1=0;2=1.4=0;3=3.2=0</code></pre>
+<p>點拆：</p>
+<ol>
+<li>用 <code>#</code> 切開：前半獨贏，後半位置。</li>
+<li>每半邊用 <code>;</code> 切開。第一段係 <code>WIN</code> 或 <code>PLA</code> 標籤，其餘每段 <code>馬號=賠率=標記</code>。</li>
+<li><strong>第一個數字</strong> = 馬號；<strong>第二個</strong> = 賠率（寫入對應欄）；第三個官方用來標熱門，程式唔用嚟計啡格。</li>
+<li>獨贏 map 同位置 map 分開填，最後用馬號合併成同一隻馬兩欄。</li>
+</ol>
+<p>所以「crawl 邊一格」喺呢條通道就係：<strong><code>OUT</code> 字串、<code>#</code> 前 WIN 段、<code>#</code> 後 PLA 段、每個 <code>馬號=賠率</code>。</strong></p>
+<h3>4. 官方賽果同派彩</h3>
+<p>主通道係中文賽果頁（用瀏覽器打開就係你平日睇派彩嗰版）：</p>
+<pre><code>GET https://racing.hkjc.com/racing/information/Chinese/Racing/LocalResults.aspx
+    ?RaceDate=YYYY/MM/DD
+    &amp;Racecourse=ST 或 HV
+    &amp;RaceNo=1 至 14</code></pre>
+<p>程式用 BeautifulSoup 搵 <strong>整張表文字同時包含「名次」「馬號」「馬名」</strong> 嗰個 <code>&lt;table&gt;</code>（英文頁就搵 Pla / Horse No / Horse / Win Odds）。然後按 <strong>表頭欄名</strong> 對列，唔係死記第幾格，因為馬會間中會加欄：</p>
+<table><thead><tr><th>表頭（中文或英文）</th><th>寫入</th></tr></thead><tbody>
+<tr><td>名次 / Pla.</td><td><code>finish_rank</code></td></tr>
+<tr><td>馬號 / Horse No</td><td><code>horse_no</code></td></tr>
+<tr><td>馬名 / Horse</td><td><code>horse_name</code>（去掉尾 <code> (C123)</code> 編號）</td></tr>
+<tr><td>獨贏賠率 / Win Odds</td><td><code>final_sp</code>（終賠，唔係派彩）</td></tr>
+</tbody></table>
+<p>派彩係 <strong>另一張表</strong>：表內文字有「派彩」或 <code>DIVIDEND</code>。逐行睇第一格：</p>
+<table><thead><tr><th>第一格</th><th>抄法</th></tr></thead><tbody>
+<tr><td><code>獨贏</code> 或 <code>WIN</code></td><td>該行馬號 + 金額（例如 <code>52.50</code>）→ <code>win_dividend</code>（每 $10）</td></tr>
+<tr><td><code>位置</code> 或 <code>PLACE</code></td><td>該行馬號 + 金額 → <code>placedividend</code></td></tr>
+</tbody></table>
+<p>未中嘅馬派彩寫 <code>0</code>。呢兩個數字先係回測盈虧來源。</p>
+<p>GraphQL 後備：<code>resultMeetings</code>，<code>resPools</code> 入面 <code>oddsType</code> WIN／PLA 嘅 <code>dividends[].winComb</code>（馬號）同 <code>div</code>（派彩）。呢條後備好多時 <strong>冇名次</strong>，所以優先用 HTML 成績表。</p>
+<hr />
+<h2>三、幾時抄、抄幾密</h2>
+<p>設定喺 <code>config.json</code> → <code>data</code>（網站數據中心可改門檻同間隔）：</p>
+<table><thead><tr><th>設定</th><th>預設</th><th>意思</th></tr></thead><tbody>
+<tr><td><code>checkpoints_minutes</code></td><td><code>[15, 10, 5, 1, 0]</code></td><td>只認呢幾個鐘點；<strong>冇 3</strong></td></tr>
+<tr><td><code>scrape_interval_seconds</code></td><td><code>10</code></td><td>高頻時每隔幾秒問馬會</td></tr>
+<tr><td><code>idle_poll_seconds</code></td><td><code>60</code></td><td>20 分鐘內都冇場要開，就問得慢啲</td></tr>
+<tr><td><code>monitor_lead_minutes</code></td><td><code>20</code></td><td>第一場前幾多分鐘開始密問</td></tr>
+<tr><td><code>monitor_trail_minutes</code></td><td><code>25</code></td><td>最後一場後再留幾耐</td></tr>
+<tr><td><code>commit_every_seconds</code></td><td><code>120</code></td><td>幾耐先 git push 一次</td></tr>
+<tr><td><code>brown_grid_drop_pct</code></td><td><code>50</code></td><td>啡格跌幅門檻</td></tr>
+</tbody></table>
+<p>每一場開跑時間 <code>postTime</code> 減而家香港時間 = 仲有幾多分鐘。對落窗口（大約該鐘點 ±1.5 分鐘內先算數）：</p>
+<table><thead><tr><th>標籤</th><th>大約窗口</th><th>啡格同邊個比</th></tr></thead><tbody>
+<tr><td>T-15</td><td>15.75–13.5 分鐘</td><td>（第一筆，無比）</td></tr>
+<tr><td>T-10</td><td>10.75–8.5</td><td>T-15（約 5 分鐘前）</td></tr>
+<tr><td>T-5</td><td>5.75–3.5</td><td>T-10</td></tr>
+<tr><td>（3 分鐘）</td><td><strong>唔抄</strong></td><td>—</td></tr>
+<tr><td>T-1</td><td>1.75–0.5</td><td><strong>T-5（約 4–5 分鐘前）</strong></td></tr>
+<tr><td>T-0</td><td>0.75 至開跑後約 1.5 分鐘</td><td>T-1</td></tr>
+</tbody></table>
+<p>每隻馬每個標籤只寫 <strong>一次</strong>。10 秒一跳嘅中間數唔存，所以啡格唔會被秒速跳動洗淡。</p>
+<p>寫入長表 <code>data/odds_snapshots.csv</code> 一列嘅欄：</p>
+<p><code>race_date, venue, race_no, scheduled_time, checkpoint, capture_timestamp, horse_no, horse_name, win_odds, place_odds, prev_win_odds, win_drop_pct, is_brown_grid</code></p>
+<p>之後 pivot 成寬表 <code>win_board.csv</code> / <code>place_board.csv</code>（一馬一行，T-15…T-0 各一欄）。網站下載鈕匯出嘅就係呢種寬表。<code>odds_board.csv</code> 係獨贏寬表別名。</p>
+<hr />
+<h2>四、點樣「分析」</h2>
+<h3>啡格（收集當下就算）</h3>
+<pre><code>跌幅% = (上一時間點獨贏 − 呢個時間點獨贏) / 上一時間點獨贏 × 100
+啡格 = 跌幅 ≥ 門檻（預設 50）</code></pre>
+<p>例子：T-5 獨贏 8.4，T-1 獨贏 3.8 → (8.4−3.8)/8.4 = 54.8% → 啡格。  </p>
+<p>T-1 <strong>唔會</strong>同 T-3 比（T-3 根本冇資料）。</p>
+<p>位置表用 <strong>位置賠率</strong> 做同樣對比，只供你睇；策略同 Telegram 預設仍然用 <strong>獨贏啡格</strong> 做訊號。</p>
+<h3>策略回測（網站即時計，唔使再爬）</h3>
+<p>讀已經存檔嘅 CSV：</p>
+<ol>
+<li>只取你揀嘅 checkpoint（預設 T-1）而且 <code>is_brown_grid</code> 或跌幅 ≥ 門檻。</li>
+<li>嗰刻 <code>win_odds</code> 要喺最低–最高範圍。</li>
+<li>用 <code>race_date + venue + race_no + horse_no</code> 對賽果。</li>
+<li>盈虧：</li>
+</ol>
+<p>   - 獨贏：<code>win_dividend − 10</code>，派彩 0 就 −10</p>
+<p>   - 位置：<code>placedividend − 10</code>（官方位置派彩；<strong>唔用</strong>開賽前 <code>place_odds</code> 去估）</p>
+<p>   - 兩者：兩筆加總，本金 20</p>
+<ol>
+<li>EV／ROI = 總盈虧 ÷ 總本金。</li>
+</ol>
+<p>蒙地卡羅：把歷史每注實際 PnL 有放回抽樣 1,000 條路徑，畫資金 P10–P90。</p>
+<hr />
+<h2>五、點樣 send alert</h2>
+<p>程式 <strong>唔經網站轉發</strong>。Actions 跑緊 <code>snapshot_race</code> 寫完一列，即刻喺同一進程呼叫 Telegram。</p>
+<h3>要全部成立先會送</h3>
+<ol>
+<li><code>telegram.enabled</code> 開咗，而且有 bot token（Secret 或環境變數）同 chat id。</li>
+<li>呢一列嘅 <code>checkpoint</code> <strong>等於</strong> Telegram 設定嗰個（預設 T-1）。其他時間點即使啡格都唔送。</li>
+<li>有有效獨贏。</li>
+<li><code>win_drop_pct</code> ≥ Telegram 啡格門檻（預設跟數據中心 50%）。</li>
+<li>獨贏喺 Telegram 最低–最高範圍。</li>
+<li>呢場呢隻馬今日未送過（每馬每場一條）。</li>
+</ol>
+<p>投注方法（只買獨贏／位置／兩者）<strong>唔影響準唔準則</strong>，只寫入訊息，提醒你打算點買。</p>
+<h3>送到邊</h3>
+<pre><code>POST https://api.telegram.org/bot&lt;TOKEN&gt;/sendMessage</code></pre>
+<p>內容包括：日期、場地、場次、開跑時間、馬號、中文馬名、獨贏由邊位跌到邊位、跌幅、<strong>當時位置賠率</strong>、你揀嘅投注方法、checkpoint、抄低時間（HKT）。</p>
+<p>網站「發送測試訊息」會先由瀏覽器打同一條 Bot API；被 CORS 擋就改觸發 Actions <code>test-telegram</code>。</p>
+<hr />
+<h2>六、檔案去邊、網站點讀</h2>
+<table><thead><tr><th>檔</th><th>誰寫</th><th>誰讀</th></tr></thead><tbody>
+<tr><td><code>data/odds_snapshots.csv</code></td><td>Actions 監控</td><td>回測、網站 pivot</td></tr>
+<tr><td><code>data/win_board.csv</code> / <code>place_board.csv</code></td><td>每次 upsert 後重建</td><td>下載／核對</td></tr>
+<tr><td><code>data/race_results.csv</code></td><td>收賽果</td><td>回測 EV</td></tr>
+<tr><td><code>config.json</code></td><td>你由網站儲存（PAT）或人手改</td><td>Actions 每次 loop 重讀</td></tr>
+<tr><td><code>status.json</code> / <code>logs/latest.log</code></td><td>監控</td><td>狀態頁</td></tr>
+<tr><td><code>docs/</code> 下面嘅鏡像</td><td><code>copy_to_docs()</code></td><td>GitHub Pages</td></tr>
+</tbody></table>
+<p>Pages 只係靜態檔。你撳「重新載入數據」= 再 fetch 呢啲 CSV，唔會即場問馬會。</p>
+<hr />
+<h2>七、真賽日同示範數據</h2>
+<table><thead><tr><th></th><th>示範</th><th>真賽日</th></tr></thead><tbody>
+<tr><td>邊個產生</td><td><code>generate_sample_data.py</code>（人手或 <code>demo-data</code>）</td><td><code>scraper_runner.py auto</code></td></tr>
+<tr><td>馬名</td><td>程式內建中文名單</td><td>GraphQL <code>name_ch</code></td></tr>
+<tr><td>獨贏／位置</td><td>隨機模擬，兩欄分開</td><td>馬會 WIN／PLA 兩池</td></tr>
+<tr><td>派彩</td><td>用終賠估算</td><td>賽果頁派彩表</td></tr>
+<tr><td>會唔會互相覆蓋</td><td>只喺你故意跑 <code>demo-data</code></td><td>upsert：同一場同一時間點會更新，唔同時間點就追加</td></tr>
+</tbody></table>
+<p>想核對「而家係咪真係抄緊馬會」：賽日開住 Actions log，應該見到 GraphQL 或 <code>getJSON winplaodds</code>，同埋 <code>Wrote N odds rows</code>。網站馬名應係中文，獨贏同位置數字唔應該成表相同。</p>

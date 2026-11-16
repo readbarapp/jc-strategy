@@ -1,7 +1,7 @@
 /* HKJC Quant Desk SPA */
 (function () {
   const { formatHk, weekdayZh, parseCsv, toCsv, downloadBlob, detectRepo, saveRepo,
-    loadRelativeOrRaw, ghPutFile, ghDispatch, ghLatestRun, num, isTrue, renderMarkdown } = window.HKJC;
+    loadRelativeOrRaw, ghPutFile, ghDispatch, ghLatestRun, num, isTrue } = window.HKJC;
   const { evaluate, monteCarlo, pivotOdds } = window.HKJCEngine;
 
   const ODDS_BOARD_COLS = [
@@ -44,7 +44,6 @@
     page: 1,
     tableSource: "win",
     guideKind: "user",
-    guides: { user: "", pipeline: "" },
     chart: null,
     backtest: null,
     mc: null,
@@ -84,38 +83,24 @@
     });
   }
 
-  function setGuideChip(kind) {
-    state.guideKind = kind;
-    if ($("guide-user")) $("guide-user").classList.toggle("chip-on", kind === "user");
-    if ($("guide-pipeline")) $("guide-pipeline").classList.toggle("chip-on", kind === "pipeline");
-    renderGuide();
-  }
-
-  function renderGuide() {
-    const el = $("guide-body");
-    if (!el) return;
-    const md = state.guides[state.guideKind] || "";
-    el.innerHTML = md ? renderMarkdown(md) : "<p class=\"text-slate-500\">載入說明中…</p>";
-  }
-
-  async function loadGuides() {
-    if (state.guides.user && state.guides.pipeline) {
-      renderGuide();
-      return;
+  function showGuide(kind) {
+    state.guideKind = kind === "pipeline" ? "pipeline" : "user";
+    const userBtn = $("guide-user");
+    const pipeBtn = $("guide-pipeline");
+    const userPanel = $("guide-panel-user");
+    const pipePanel = $("guide-panel-pipeline");
+    if (userBtn) {
+      userBtn.classList.toggle("chip-on", state.guideKind === "user");
+      userBtn.classList.toggle("text-slate-400", state.guideKind !== "user");
     }
-    const g = state.github;
-    try {
-      const [userText, pipeText] = await Promise.all([
-        loadRelativeOrRaw(g, "./guides/user-guide.md", "docs/guides/user-guide.md"),
-        loadRelativeOrRaw(g, "./guides/data-pipeline.md", "docs/guides/data-pipeline.md"),
-      ]);
-      state.guides.user = userText;
-      state.guides.pipeline = pipeText;
-      renderGuide();
-    } catch (err) {
-      if ($("guide-body")) $("guide-body").textContent = err.message || String(err);
+    if (pipeBtn) {
+      pipeBtn.classList.toggle("chip-on", state.guideKind === "pipeline");
+      pipeBtn.classList.toggle("text-slate-400", state.guideKind !== "pipeline");
     }
+    if (userPanel) userPanel.classList.toggle("hidden", state.guideKind !== "user");
+    if (pipePanel) pipePanel.classList.toggle("hidden", state.guideKind !== "pipeline");
   }
+  window.HKJCDesk = { showGuide };
 
   function tickClock() {
     const now = new Date();
@@ -133,7 +118,7 @@
     });
     if (id === "strategy" || id === "monte") runStrategy();
     if (id === "status") refreshStatus();
-    if (id === "guide") loadGuides();
+    if (id === "guide") showGuide(state.guideKind || "user");
   }
 
   async function loadAll() {
@@ -156,7 +141,6 @@
       renderDataTable();
       renderStatus();
       runStrategy();
-      loadGuides();
       toast(`已載入 ${oddsBoard().length} 匹馬賠率走勢、賽果 ${state.results.length} 列（示範歷史為模擬數據）`, "ok");
     } catch (err) {
       toast(err.message || String(err), "error");
@@ -225,17 +209,38 @@
     if ([...select.options].some((o) => o.value === current)) select.value = current;
   }
 
+  function normId(value) {
+    const n = parseInt(String(value == null ? "" : value).trim(), 10);
+    return Number.isFinite(n) ? String(n) : String(value == null ? "" : value).trim();
+  }
+
   function horseKey(row) {
-    return `${row.race_date}|${row.venue}|${row.race_no}|${row.horse_no}`;
+    return [
+      String(row.race_date || "").trim(),
+      String(row.venue || "").trim().toUpperCase(),
+      normId(row.race_no),
+      normId(row.horse_no),
+    ].join("|");
   }
 
   function winBrownLookup() {
     const map = new Map();
+    const threshold = currentThreshold();
+    for (const row of state.odds || []) {
+      const key = horseKey(row);
+      const prev = map.get(key) || { any: false, t1: false };
+      const drop = num(row.win_drop_pct, 0);
+      const brown = isTrue(row.is_brown_grid) || drop >= threshold;
+      if (brown) prev.any = true;
+      if (brown && String(row.checkpoint || "").toUpperCase() === "T-1") prev.t1 = true;
+      map.set(key, prev);
+    }
     for (const row of oddsBoard("win")) {
-      map.set(horseKey(row), {
-        any: isTrue(row.is_brown_grid) || !!row.brown_at,
-        t1: isTrue(row.brown_t1),
-      });
+      const key = horseKey(row);
+      const prev = map.get(key) || { any: false, t1: false };
+      if (isTrue(row.is_brown_grid) || row.brown_at) prev.any = true;
+      if (isTrue(row.brown_t1)) prev.t1 = true;
+      map.set(key, prev);
     }
     return map;
   }
@@ -247,23 +252,24 @@
         t1: isTrue(row.brown_t1),
       };
     }
+    if (!lookup) return { any: false, t1: false };
     return lookup.get(horseKey(row)) || { any: false, t1: false };
   }
 
   function filteredRows() {
-    const date = $("filter-date").value;
-    const venue = $("filter-venue").value;
-    const race = $("filter-race").value;
-    const horse = $("filter-horse").value.trim();
-    const brown = $("filter-brown").checked;
-    const brownT1 = $("filter-brown-t1") && $("filter-brown-t1").checked;
+    const date = $("filter-date") ? $("filter-date").value : "";
+    const venue = $("filter-venue") ? $("filter-venue").value : "";
+    const race = $("filter-race") ? $("filter-race").value : "";
+    const horse = $("filter-horse") ? $("filter-horse").value.trim() : "";
+    const brown = !!( $("filter-brown") && $("filter-brown").checked );
+    const brownT1 = !!( $("filter-brown-t1") && $("filter-brown-t1").checked );
     const src = state.tableSource === "results" ? state.results : oddsBoard(state.tableSource);
-    const lookup = state.tableSource === "results" && (brown || brownT1) ? winBrownLookup() : null;
+    const lookup = brown || brownT1 ? winBrownLookup() : null;
     return src.filter((row) => {
       if (date && row.race_date !== date) return false;
-      if (venue && row.venue !== venue) return false;
-      if (race && String(row.race_no) !== race) return false;
-      if (horse && String(row.horse_no) !== horse) return false;
+      if (venue && String(row.venue).toUpperCase() !== venue.toUpperCase()) return false;
+      if (race && normId(row.race_no) !== normId(race)) return false;
+      if (horse && normId(row.horse_no) !== normId(horse)) return false;
       if (brownT1 || brown) {
         const flags = brownFlags(row, lookup);
         if (brownT1 && !flags.t1) return false;
@@ -279,7 +285,13 @@
   }
 
   function renderDataTable() {
-    const rows = filteredRows();
+    let rows;
+    try {
+      rows = filteredRows();
+    } catch (err) {
+      toast(err.message || String(err), "error");
+      return;
+    }
     const pageSize = 80;
     const pages = Math.max(1, Math.ceil(rows.length / pageSize));
     if (state.page > pages) state.page = pages;
@@ -306,18 +318,23 @@
       };
       $("data-head").innerHTML =
         "<tr>" + RESULT_FIELDS.map((f) => `<th>${labels[f] || f}</th>`).join("") + "</tr>";
-      $("data-body").innerHTML = slice
-        .map((row) => {
-          const tds = RESULT_FIELDS
-            .map((f) => {
-              let v = row[f];
-              if (f === "venue") v = venueName(v);
-              return `<td>${v == null || v === "" ? "—" : v}</td>`;
-            })
-            .join("");
-          return `<tr>${tds}</tr>`;
-        })
-        .join("");
+      if (!slice.length) {
+        $("data-body").innerHTML =
+          `<tr><td colspan="${RESULT_FIELDS.length}" class="text-slate-500">呢個 filter 之下冇賽果。啡格係用獨贏急跌對同一隻馬（開賽前1分鐘 = T-1 對 T-5）。</td></tr>`;
+      } else {
+        $("data-body").innerHTML = slice
+          .map((row) => {
+            const tds = RESULT_FIELDS
+              .map((f) => {
+                let v = row[f];
+                if (f === "venue") v = venueName(v);
+                return `<td>${v == null || v === "" ? "—" : v}</td>`;
+              })
+              .join("");
+            return `<tr>${tds}</tr>`;
+          })
+          .join("");
+      }
     } else {
       const poolName = state.tableSource === "place" ? "位置賠率" : "獨贏賠率";
       $("table-meta").textContent = `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 急跌格 = 較約 5 分鐘前（上一節點）跌 ≥ ${currentThreshold()}%`;
@@ -650,8 +667,8 @@
         renderDataTable();
       });
     });
-    $("guide-user").addEventListener("click", () => setGuideChip("user"));
-    $("guide-pipeline").addEventListener("click", () => setGuideChip("pipeline"));
+    if ($("guide-user")) $("guide-user").addEventListener("click", (ev) => { ev.preventDefault(); showGuide("user"); });
+    if ($("guide-pipeline")) $("guide-pipeline").addEventListener("click", (ev) => { ev.preventDefault(); showGuide("pipeline"); });
     $("src-win").addEventListener("click", () => {
       state.tableSource = "win";
       state.page = 1;
