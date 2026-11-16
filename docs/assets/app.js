@@ -485,8 +485,18 @@
       sims: num($("mc-sims").value, 1000),
     });
     state.mc = mc;
+    const pnl = Math.round(mc.expected_pnl);
+    const pct = Number(mc.expected_roi || 0);
+    const dollar = (pnl >= 0 ? "+" : "") + "$" + pnl;
+    const pctTxt = (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%";
     $("mc-kpis").innerHTML = [
-      kpi("e", "預期年化回報", (mc.expected_pnl >= 0 ? "+" : "") + Math.round(mc.expected_pnl), `期末資金 $${Math.round(mc.expected_final)} · ${mc.races} 注／年`),
+      kpi(
+        "e",
+        "預期年化回報",
+        `${dollar}  ·  ${pctTxt}`,
+        `期末資金 $${Math.round(mc.expected_final)} · ${mc.races} 注／年`,
+        pnl >= 0 ? "up" : "down"
+      ),
       kpi("d", "最大回撤 MDD", (mc.mdd_median * 100).toFixed(1) + "%", `P95 ${(mc.mdd_p95 * 100).toFixed(1)}%`, "down"),
       kpi("u", "破產概率", mc.ruin.toFixed(2) + "%", `${mc.sims} 次模擬下注`, mc.ruin > 5 ? "down" : "up"),
       kpi("b", "P10–P90 期末", `$${Math.round(mc.p10_final)} – $${Math.round(mc.p90_final)}`, "資金分佈區間"),
