@@ -35,6 +35,7 @@
         <button data-tab="strategy" class="rounded-xl border border-transparent px-3 py-2.5 text-left text-slate-400 hover:text-gold-300">策略回測 · 蒙地卡羅</button>
         <button data-tab="telegram" class="rounded-xl border border-transparent px-3 py-2.5 text-left text-slate-400 hover:text-gold-300">Telegram 控制</button>
         <button data-tab="status" class="rounded-xl border border-transparent px-3 py-2.5 text-left text-slate-400 hover:text-gold-300">即時狀態 · 日誌</button>
+        <button data-tab="guide" class="rounded-xl border border-transparent px-3 py-2.5 text-left text-slate-400 hover:text-gold-300">使用說明</button>
       </nav>
       <p class="mt-6 text-[11px] leading-relaxed text-slate-600">時間一律 Asia/Hong_Kong（UTC+8）。啡格預設跌幅 ≥ 50%。本工具僅供研究回測，並非投注建議。</p>
     </aside>
@@ -57,6 +58,7 @@
         <button data-tab="strategy" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs text-slate-400">策略 / MC</button>
         <button data-tab="telegram" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs text-slate-400">Telegram</button>
         <button data-tab="status" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs text-slate-400">狀態</button>
+        <button data-tab="guide" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs text-slate-400">說明</button>
       </div>
 
       <div class="px-4 py-4 md:px-8">
@@ -304,6 +306,20 @@
           <article>
             <h2 class="mb-2 text-sm font-semibold text-gold-300">Live Log Viewer · logs/latest.log</h2>
             <pre id="log-view" class="log-view">載入中…</pre>
+          </article>
+        </section>
+
+        <!-- GUIDES -->
+        <section data-panel="guide" class="hidden space-y-6">
+          <article class="kpi-card">
+            <div class="flex flex-wrap gap-2">
+              <button id="guide-user" class="chip-on rounded-lg border border-white/10 px-3 py-1 text-xs">1. 用家說明 · 每個賽馬日做咩</button>
+              <button id="guide-pipeline" class="rounded-lg border border-white/10 px-3 py-1 text-xs text-slate-400">2. 點樣收集、分析、發警報</button>
+            </div>
+            <p class="mt-3 text-xs text-slate-500">完整原文亦喺 repo：<span class="mono">docs/guides/user-guide.md</span> 同 <span class="mono">docs/guides/data-pipeline.md</span>。</p>
+          </article>
+          <article class="kpi-card">
+            <div id="guide-body" class="guide-prose"></div>
           </article>
         </section>
       </div>

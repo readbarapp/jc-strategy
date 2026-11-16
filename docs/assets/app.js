@@ -1,7 +1,7 @@
 /* HKJC Quant Desk SPA */
 (function () {
   const { formatHk, weekdayZh, parseCsv, toCsv, downloadBlob, detectRepo, saveRepo,
-    loadRelativeOrRaw, ghPutFile, ghDispatch, ghLatestRun, num, isTrue } = window.HKJC;
+    loadRelativeOrRaw, ghPutFile, ghDispatch, ghLatestRun, num, isTrue, renderMarkdown } = window.HKJC;
   const { evaluate, monteCarlo, pivotOdds } = window.HKJCEngine;
 
   const ODDS_BOARD_COLS = [
@@ -43,6 +43,8 @@
     noticeKind: "info",
     page: 1,
     tableSource: "win",
+    guideKind: "user",
+    guides: { user: "", pipeline: "" },
     chart: null,
     backtest: null,
     mc: null,
@@ -82,6 +84,39 @@
     });
   }
 
+  function setGuideChip(kind) {
+    state.guideKind = kind;
+    if ($("guide-user")) $("guide-user").classList.toggle("chip-on", kind === "user");
+    if ($("guide-pipeline")) $("guide-pipeline").classList.toggle("chip-on", kind === "pipeline");
+    renderGuide();
+  }
+
+  function renderGuide() {
+    const el = $("guide-body");
+    if (!el) return;
+    const md = state.guides[state.guideKind] || "";
+    el.innerHTML = md ? renderMarkdown(md) : "<p class=\"text-slate-500\">載入說明中…</p>";
+  }
+
+  async function loadGuides() {
+    if (state.guides.user && state.guides.pipeline) {
+      renderGuide();
+      return;
+    }
+    const g = state.github;
+    try {
+      const [userText, pipeText] = await Promise.all([
+        loadRelativeOrRaw(g, "./guides/user-guide.md", "docs/guides/user-guide.md"),
+        loadRelativeOrRaw(g, "./guides/data-pipeline.md", "docs/guides/data-pipeline.md"),
+      ]);
+      state.guides.user = userText;
+      state.guides.pipeline = pipeText;
+      renderGuide();
+    } catch (err) {
+      if ($("guide-body")) $("guide-body").textContent = err.message || String(err);
+    }
+  }
+
   function tickClock() {
     const now = new Date();
     $("hk-clock").textContent = formatHk(now);
@@ -98,6 +133,7 @@
     });
     if (id === "strategy" || id === "monte") runStrategy();
     if (id === "status") refreshStatus();
+    if (id === "guide") loadGuides();
   }
 
   async function loadAll() {
@@ -120,6 +156,7 @@
       renderDataTable();
       renderStatus();
       runStrategy();
+      loadGuides();
       toast(`已載入 ${oddsBoard().length} 匹馬賠率走勢、賽果 ${state.results.length} 列（示範歷史為模擬數據）`, "ok");
     } catch (err) {
       toast(err.message || String(err), "error");
@@ -577,6 +614,8 @@
         renderDataTable();
       });
     });
+    $("guide-user").addEventListener("click", () => setGuideChip("user"));
+    $("guide-pipeline").addEventListener("click", () => setGuideChip("pipeline"));
     $("src-win").addEventListener("click", () => {
       state.tableSource = "win";
       state.page = 1;

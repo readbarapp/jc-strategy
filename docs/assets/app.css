@@ -92,5 +92,61 @@ input[type="range"] { accent-color: #e4c36a; }
     radial-gradient(1200px 400px at 20% -10%, rgba(228,195,106,.12), transparent),
     linear-gradient(180deg, #0b1220, #070b12);
 }
+.guide-prose {
+  max-width: 52rem;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: #cbd5e1;
+}
+.guide-prose h1 {
+  margin: 0 0 0.85rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: #fde68a;
+}
+.guide-prose h2 {
+  margin: 1.6rem 0 0.7rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #fde68a;
+}
+.guide-prose h3 {
+  margin: 1.2rem 0 0.45rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+.guide-prose p, .guide-prose ul, .guide-prose ol { margin: 0.55rem 0; }
+.guide-prose ul, .guide-prose ol { padding-left: 1.25rem; }
+.guide-prose li { margin: 0.2rem 0; }
+.guide-prose code, .guide-prose .mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: #fde68a;
+}
+.guide-prose pre {
+  overflow: auto;
+  border-radius: 0.75rem;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0.85rem 1rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+.guide-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin: 0.75rem 0;
+}
+.guide-prose th, .guide-prose td {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.4rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+.guide-prose th { background: #10182a; color: #94a3b8; font-weight: 500; }
+.guide-prose hr { border: 0; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 1.4rem 0; }
+.guide-prose strong { color: #f1f5f9; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: #334155; border-radius: 99px; }
