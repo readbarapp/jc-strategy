@@ -9,17 +9,24 @@
     return rank <= 3;
   }
 
-  function triggers(odds, minOdds, maxOdds, threshold) {
+  function normalizeCheckpoint(value) {
+    const text = String(value || "T-1").trim().toUpperCase();
+    if (/^\d+$/.test(text)) return "T-" + text;
+    return text;
+  }
+
+  function triggers(odds, minOdds, maxOdds, threshold, checkpoint) {
+    const wanted = normalizeCheckpoint(checkpoint);
     const best = new Map();
     for (const row of odds) {
+      if (String(row.checkpoint || "").toUpperCase() !== wanted) continue;
       const win = num(row.win_odds, NaN);
       const drop = num(row.win_drop_pct, 0);
       const brown = isTrue(row.is_brown_grid) || drop >= threshold;
       if (!Number.isFinite(win) || !brown) continue;
       if (win < minOdds || win > maxOdds) continue;
       const key = `${row.race_date}|${row.venue}|${row.race_no}|${row.horse_no}`;
-      const prev = best.get(key);
-      if (!prev || drop >= num(prev.win_drop_pct, 0)) best.set(key, row);
+      best.set(key, row);
     }
     return [...best.values()];
   }
@@ -29,6 +36,7 @@
     const maxOdds = num(opts.maxOdds, 9.0);
     const threshold = num(opts.threshold, 50);
     const betType = opts.betType || "win";
+    const checkpoint = opts.checkpoint || "T-1";
     const stake = num(opts.stake, 10);
     const resultMap = new Map();
     const field = new Map();
@@ -39,7 +47,7 @@
       field.set(fk, (field.get(fk) || 0) + 1);
     }
     const trades = [];
-    for (const t of triggers(odds, minOdds, maxOdds, threshold)) {
+    for (const t of triggers(odds, minOdds, maxOdds, threshold, checkpoint)) {
       const key = `${t.race_date}|${t.venue}|${t.race_no}|${t.horse_no}`;
       const res = resultMap.get(key);
       if (!res) continue;

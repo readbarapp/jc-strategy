@@ -43,10 +43,13 @@ def test_backtest_on_sample():
     results = load_results()
     assert len(odds) > 100
     assert len(results) > 50
-    stats = evaluate(odds, results, min_odds=3.5, max_odds=9.0, bet_type="win", stake=10, threshold=50)
+    stats = evaluate(
+        odds, results, min_odds=3.5, max_odds=9.0, bet_type="win", stake=10, threshold=50, checkpoint="T-1"
+    )
     assert "roi" in stats
-    assert stats["triggers"] > 20
+    assert stats["triggers"] >= 1
     assert stats["staked"] == stats["triggers"] * 10
+    assert all(str(t.get("checkpoint")) == "T-1" for t in stats["trades"])
     brown = sum(1 for r in odds if str(r["is_brown_grid"]).lower() == "true")
     assert brown > 30
     names = {r["horse_name"] for r in odds}
@@ -63,10 +66,72 @@ def test_odds_board_one_row_per_horse():
     assert sample["win_t15"] != "" or sample["win_t10"] != ""
 
 
+def test_t1_strategy_ignores_other_checkpoints():
+    odds = [
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "1",
+            "checkpoint": "T-5",
+            "horse_no": "7",
+            "horse_name": "和諧王",
+            "win_odds": 4.0,
+            "win_drop_pct": 60,
+            "is_brown_grid": "true",
+        },
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "1",
+            "checkpoint": "T-1",
+            "horse_no": "7",
+            "horse_name": "和諧王",
+            "win_odds": 5.0,
+            "win_drop_pct": 10,
+            "is_brown_grid": "false",
+        },
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "2",
+            "checkpoint": "T-1",
+            "horse_no": "3",
+            "horse_name": "金程千里",
+            "win_odds": 6.0,
+            "win_drop_pct": 55,
+            "is_brown_grid": "true",
+        },
+    ]
+    results = [
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "1",
+            "horse_no": "7",
+            "finish_rank": 4,
+            "win_dividend": 0,
+            "placedividend": 0,
+        },
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "2",
+            "horse_no": "3",
+            "finish_rank": 1,
+            "win_dividend": 60,
+            "placedividend": 20,
+        },
+    ]
+    stats = evaluate(odds, results, min_odds=3.5, max_odds=9.0, checkpoint="T-1", threshold=50)
+    assert stats["triggers"] == 1
+    assert stats["trades"][0]["horse_no"] == "3"
+
+
 if __name__ == "__main__":
     test_timezone_is_hong_kong()
     test_drop_and_brown_grid()
     test_checkpoints()
     test_backtest_on_sample()
     test_odds_board_one_row_per_horse()
+    test_t1_strategy_ignores_other_checkpoints()
     print("all tests ok")

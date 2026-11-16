@@ -27,6 +27,7 @@ DEFAULTS: dict[str, Any] = {
         "min_odds": 3.5,
         "max_odds": 9.0,
         "bet_type": "win",
+        "checkpoint": "T-1",
         "stake": 10,
     },
     "monte_carlo": {
