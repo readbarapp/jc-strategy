@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from .odds_math import is_brown_grid, parse_odds, win_drop_pct
 
-CHECKPOINTS = ["T-15", "T-10", "T-5", "T-3", "T-1", "T-0"]
+CHECKPOINTS = ["T-15", "T-10", "T-5", "T-1", "T-0"]
 CP_SUFFIX = {
     "T-15": "t15",
     "T-10": "t10",
     "T-5": "t5",
-    "T-3": "t3",
     "T-1": "t1",
     "T-0": "t0",
 }
@@ -24,17 +23,14 @@ WIDE_FIELDS = [
     "odds_t15",
     "odds_t10",
     "odds_t5",
-    "odds_t3",
     "odds_t1",
     "odds_t0",
     "drop_t10",
     "drop_t5",
-    "drop_t3",
     "drop_t1",
     "drop_t0",
     "brown_t10",
     "brown_t5",
-    "brown_t3",
     "brown_t1",
     "brown_t0",
     "is_brown_grid",

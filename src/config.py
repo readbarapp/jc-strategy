@@ -18,7 +18,7 @@ DEFAULTS: dict[str, Any] = {
         "scrape_interval_seconds": 10,
         "idle_poll_seconds": 60,
         "commit_every_seconds": 120,
-        "checkpoints_minutes": [15, 10, 5, 3, 1, 0],
+        "checkpoints_minutes": [15, 10, 5, 1, 0],
         "venues": ["ST", "HV"],
         "monitor_lead_minutes": 20,
         "monitor_trail_minutes": 25,

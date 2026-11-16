@@ -68,8 +68,8 @@
             <h2 class="text-sm font-semibold text-gold-300">點樣收錄數據（用日常說話講）</h2>
             <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-slate-300">
               <li>每日香港時間大約中午同傍晚，系統會自動問：「今日沙田或者跑馬地有冇賽馬？」冇就收工，有就開始睇錶。</li>
-              <li>開跑前 15、10、5、3、1 分鐘同開跑嗰下，分別向馬會問<strong class="text-gold-300">兩個獨立彩池</strong>：獨贏（WIN）同位置（PLA）。兩個數字分開寫入兩欄，唔會撈亂。</li>
-              <li>獨贏啡格：呢個鐘點嘅<strong class="text-gold-300">獨贏</strong>比起上一個鐘點平咗一半或以上。位置表用同樣方法睇位置賠率急跌，但策略／通知預設仍然用獨贏啡格做訊號。</li>
+              <li>開跑前 15、10、5、1 分鐘同開跑嗰下，分別向馬會問<strong class="text-gold-300">兩個獨立彩池</strong>：獨贏（WIN）同位置（PLA）。兩個數字分開寫入兩欄，唔會撈亂。唔再抄開賽前 3 分鐘。</li>
+              <li>獨贏啡格：呢個鐘點嘅<strong class="text-gold-300">獨贏</strong>比起<strong class="text-gold-300">上一個鐘點（大約 5 分鐘前）</strong>平咗一半或以上。例如開賽前 1 分鐘同開賽前 5 分鐘比。位置表用同樣方法睇位置急跌，但策略／通知預設仍然用獨贏啡格做訊號。</li>
               <li>賽事完咗再抄官方名次、獨贏派彩、位置派彩（每 $10）。回測「只買位置」用嘅係呢個官方位置派彩，唔係開賽前位置賠率去估。</li>
               <li>而家表入面舊日子係<strong class="text-amber-200">示範假數據</strong>（欄位同真 crawl 一模一樣）。真賽日同一套程式把馬會回覆寫入同一批 CSV。</li>
             </ol>
@@ -130,9 +130,12 @@
               <label class="flex items-center gap-2 text-xs text-slate-400">
                 <input id="filter-brown" type="checkbox" class="accent-amber-600" /> 只看啡格
               </label>
+              <label class="flex items-center gap-2 text-xs text-slate-400">
+                <input id="filter-brown-t1" type="checkbox" class="accent-amber-600" /> 只看開賽1分鐘前出現啡格
+              </label>
               <span id="table-meta" class="ml-auto text-[11px] text-slate-500"></span>
             </div>
-            <p id="board-legend" class="border-b border-white/5 bg-ink-900 px-4 py-2 text-[11px] text-slate-500">呢張表淨係<strong class="text-slate-300">獨贏賠率</strong>（馬會 WIN 彩池）。撳「位置賠率」睇 PLA 彩池。</p>
+            <p id="board-legend" class="border-b border-white/5 bg-ink-900 px-4 py-2 text-[11px] text-slate-500">呢張表淨係<strong class="text-slate-300">獨贏賠率</strong>（馬會 WIN 彩池）。開賽前 1 分鐘啡格係同開賽前 5 分鐘比。</p>
             <div class="max-h-[560px] overflow-auto">
               <table class="grid-table">
                 <thead id="data-head"></thead>
@@ -151,11 +154,11 @@
         <section data-panel="strategy" class="hidden space-y-6">
           <article class="kpi-card">
             <h2 class="text-sm font-semibold text-gold-300">策略參數</h2>
-            <p class="mt-2 text-sm leading-relaxed text-slate-300">揀馬用<strong class="text-gold-300">獨贏啡格</strong>＋嗰一刻<strong class="text-gold-300">獨贏賠率範圍</strong>（預設開賽前 1 分鐘）。之後先決定點買：$10 獨贏、 $10 位置、定兩者都買。獨贏盈虧用官方<strong class="text-gold-300">獨贏派彩</strong>；位置盈虧用官方<strong class="text-gold-300">位置派彩</strong>（每 $10），唔係用開賽前位置賠率去估，亦唔係用獨贏數字去假扮位置。</p>
+            <p class="mt-2 text-sm leading-relaxed text-slate-300">揀馬用<strong class="text-gold-300">獨贏啡格</strong>＋嗰一刻<strong class="text-gold-300">獨贏賠率範圍</strong>（預設開賽前 1 分鐘）。開賽前 1 分鐘嘅啡格係同<strong class="text-gold-300">開賽前 5 分鐘</strong>比，唔再同 3 分鐘比。之後先決定點買：$10 獨贏、 $10 位置、定兩者都買。獨贏盈虧用官方<strong class="text-gold-300">獨贏派彩</strong>；位置盈虧用官方<strong class="text-gold-300">位置派彩</strong>（每 $10）。</p>
             <details class="mt-3 text-xs leading-relaxed text-slate-400">
               <summary class="cursor-pointer text-gold-300">EV 點計（即使畫面主要見到獨贏）</summary>
               <ol class="mt-2 list-decimal space-y-1 pl-5">
-                <li>訊號永遠睇獨贏：選定時間點（例如 T-1）獨贏較上一節點跌 ≥ 門檻，而且嗰刻獨贏喺範圍內。</li>
+                <li>訊號永遠睇獨贏：選定時間點（例如 T-1）獨贏較上一個時間點（T-1 就係 T-5，大約 5 分鐘前）跌 ≥ 門檻，而且嗰刻獨贏喺範圍內。</li>
                 <li>只買獨贏：中就加官方 win_dividend − $10，唔中 −$10。</li>
                 <li>只買位置：同一批馬，但盈虧用 race_results.csv 嘅 placedividend。有派彩先當中；冇派彩就 −$10。唔會用獨贏賠率去估位置派彩。</li>
                 <li>獨贏 + 位置：上面兩筆 $10 一齊計，總本金 $20。</li>
@@ -169,7 +172,6 @@
                   <option value="T-15">開賽前 15 分鐘</option>
                   <option value="T-10">開賽前 10 分鐘</option>
                   <option value="T-5">開賽前 5 分鐘</option>
-                  <option value="T-3">開賽前 3 分鐘</option>
                   <option value="T-1" selected>開賽前 1 分鐘</option>
                   <option value="T-0">開跑嗰下</option>
                 </select>
@@ -244,7 +246,6 @@
                   <option value="T-15">開賽前 15 分鐘</option>
                   <option value="T-10">開賽前 10 分鐘</option>
                   <option value="T-5">開賽前 5 分鐘</option>
-                  <option value="T-3">開賽前 3 分鐘</option>
                   <option value="T-1" selected>開賽前 1 分鐘</option>
                   <option value="T-0">開跑嗰下</option>
                 </select>

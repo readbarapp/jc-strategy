@@ -8,7 +8,6 @@
     { key: "odds_t15", label: "開賽前15分鐘", brownKey: null },
     { key: "odds_t10", label: "開賽前10分鐘", brownKey: "brown_t10" },
     { key: "odds_t5", label: "開賽前5分鐘", brownKey: "brown_t5" },
-    { key: "odds_t3", label: "開賽前3分鐘", brownKey: "brown_t3" },
     { key: "odds_t1", label: "開賽前1分鐘", brownKey: "brown_t1" },
     { key: "odds_t0", label: "開跑", brownKey: "brown_t0" },
   ];
@@ -23,7 +22,6 @@
     ["odds_t15", "開賽前15分鐘"],
     ["odds_t10", "開賽前10分鐘"],
     ["odds_t5", "開賽前5分鐘"],
-    ["odds_t3", "開賽前3分鐘"],
     ["odds_t1", "開賽前1分鐘"],
     ["odds_t0", "開跑"],
     ["brown_at", "急跌時間點"],
@@ -196,13 +194,15 @@
     const race = $("filter-race").value;
     const horse = $("filter-horse").value.trim();
     const brown = $("filter-brown").checked;
+    const brownT1 = $("filter-brown-t1") && $("filter-brown-t1").checked;
     const src = state.tableSource === "results" ? state.results : oddsBoard(state.tableSource);
     return src.filter((row) => {
       if (date && row.race_date !== date) return false;
       if (venue && row.venue !== venue) return false;
       if (race && String(row.race_no) !== race) return false;
       if (horse && String(row.horse_no) !== horse) return false;
-      if (brown && state.tableSource !== "results" && !isTrue(row.is_brown_grid) && !row.brown_at) return false;
+      if (state.tableSource !== "results" && brownT1 && !isTrue(row.brown_t1)) return false;
+      if (brown && state.tableSource !== "results" && !brownT1 && !isTrue(row.is_brown_grid) && !row.brown_at) return false;
       return true;
     });
   }
@@ -247,12 +247,12 @@
         .join("");
     } else {
       const poolName = state.tableSource === "place" ? "位置賠率" : "獨贏賠率";
-      $("table-meta").textContent = `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 急跌格 = 較上一節點跌 ≥ ${currentThreshold()}%`;
+      $("table-meta").textContent = `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 急跌格 = 較約 5 分鐘前（上一節點）跌 ≥ ${currentThreshold()}%`;
       if ($("board-legend")) {
         $("board-legend").innerHTML =
           state.tableSource === "place"
-            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。急跌格＝呢個時間點位置賠率較上一個時間點跌 ≥ 門檻。獨贏同位置係分開兩個彩池、兩欄數字，唔會撈亂。"
-            : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。啡格／急跌格＝呢個時間點獨贏較上一個時間點跌 ≥ 門檻。位置賠率請撳上面「位置賠率」。而家舊日子係<strong class=\"text-amber-200\">示範假數據</strong>；真賽日同一套程式寫入真實 WIN／PLA。";
+            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。急跌格＝較上一個時間點（約 5 分鐘前）跌 ≥ 門檻，例如開賽前 1 分鐘同開賽前 5 分鐘比。冇開賽前 3 分鐘欄。"
+            : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。啡格＝較上一個時間點（約 5 分鐘前）跌 ≥ 門檻；開賽前 1 分鐘同開賽前 5 分鐘比。唔再抄開賽前 3 分鐘。";
       }
       $("data-head").innerHTML = `<tr>
         <th>日期</th><th>場地</th><th>場次</th><th>開跑</th><th>馬號</th><th>馬名</th>
@@ -567,7 +567,7 @@
       $(id).addEventListener("change", runStrategy);
       $(id).addEventListener("input", runStrategy);
     });
-    ["filter-date", "filter-venue", "filter-race", "filter-horse", "filter-brown"].forEach((id) => {
+    ["filter-date", "filter-venue", "filter-race", "filter-horse", "filter-brown", "filter-brown-t1"].forEach((id) => {
       $(id).addEventListener("input", () => {
         state.page = 1;
         renderDataTable();

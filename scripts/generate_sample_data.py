@@ -41,7 +41,7 @@ MEETINGS = [
     ("2026-11-15", "ST", "13:00", 10),
 ]
 
-CHECKPOINTS = [15, 10, 5, 3, 1, 0]
+CHECKPOINTS = [15, 10, 5, 1, 0]
 THRESHOLD = 50.0
 
 
@@ -117,7 +117,7 @@ def generate(seed: int = 20261116) -> None:
             opening = _opening_book(rng, field)
             mid_band = [i for i, price in enumerate(opening) if 6.0 <= price <= 22.0]
             steamer = rng.choice(mid_band) if mid_band and rng.random() < 0.88 else None
-            crash_step = rng.choice([2, 3, 4]) if steamer is not None else -1
+            crash_step = rng.choice([2, 3, 3]) if steamer is not None else -1  # T-5 or T-1 vs ~5 min earlier
             path = [opening]
             prices = opening[:]
             for step_i, _ in enumerate(CHECKPOINTS[1:], start=1):
