@@ -400,12 +400,14 @@ class RaceInfo:
     status: str = ""
     name: str = ""
     runners: dict[int, str] = field(default_factory=dict)
+    runner_status: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass
 class Meeting:
     race_date: str
     venue: str
+    status: str = ""
     races: list[RaceInfo] = field(default_factory=list)
 
     def race(self, race_no: int) -> RaceInfo | None:
@@ -557,10 +559,12 @@ class HKJCClient:
                 except Exception:
                     post_hk = str(post)[11:19] if len(str(post)) >= 19 else str(post)
                 runners = {}
+                runner_status = {}
                 for runner in race.get("runners") or []:
                     hno = int(runner.get("no") or 0)
                     if hno:
                         runners[hno] = horse_name_zh(runner, hno)
+                        runner_status[hno] = str(runner.get("status") or "")
                 races.append(
                     RaceInfo(
                         race_no=no,
@@ -568,11 +572,17 @@ class HKJCClient:
                         status=str(race.get("status") or ""),
                         name=race.get("raceName_en") or race.get("raceName_ch") or "",
                         runners=runners,
+                        runner_status=runner_status,
                     )
                 )
             if races:
                 races.sort(key=lambda r: r.race_no)
-                return Meeting(race_date=race_date, venue=code, races=races)
+                return Meeting(
+                    race_date=race_date,
+                    venue=code,
+                    status=str(raw.get("status") or ""),
+                    races=races,
+                )
         return self._meeting_from_results_page(race_date, venue)
 
     def _meeting_from_results_page(self, race_date: str, venue: str) -> Meeting | None:
@@ -659,6 +669,7 @@ class HKJCClient:
             return []
         race = meeting.race(race_no)
         names = race.runners if race else {}
+        statuses = race.runner_status if race else {}
         numbers = sorted(set(win_map) | set(pla_map) | set(names))
         return [
             RunnerOdds(
@@ -666,6 +677,7 @@ class HKJCClient:
                 horse_name=names.get(n) or f"第{n}號",
                 win_odds=win_map.get(n),
                 place_odds=pla_map.get(n),
+                status=statuses.get(n) or "declared",
             )
             for n in numbers
         ]
@@ -697,6 +709,7 @@ class HKJCClient:
         self._parse_pool_segment(pla_part, pla_map)
         race = meeting.race(race_no)
         names = race.runners if race else {}
+        statuses = race.runner_status if race else {}
         numbers = sorted(set(win_map) | set(pla_map) | set(names))
         return [
             RunnerOdds(
@@ -704,6 +717,7 @@ class HKJCClient:
                 horse_name=names.get(n) or f"第{n}號",
                 win_odds=win_map.get(n),
                 place_odds=pla_map.get(n),
+                status=statuses.get(n) or "declared",
             )
             for n in numbers
         ]

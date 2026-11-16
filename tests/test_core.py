@@ -8,8 +8,16 @@ sys.path.insert(0, str(ROOT))
 
 from src.backtest import evaluate, payout_odds, race_day_count, scale_unit_pnl, ticket_pnl, trigger_rows, yearly_bets
 from src.csv_store import load_odds, load_results
-from src.hkjc_client import HKJCClient, Meeting
-from src.monitor import plan_auto, restore_monitor_state, should_handoff
+from src.hkjc_client import HKJCClient, Meeting, RaceInfo, RunnerOdds
+from src.monitor import plan_auto, restore_monitor_state, should_handoff, snapshot_race
+from src.race_events import (
+    is_horse_scratched,
+    is_race_off,
+    is_race_resulted,
+    post_times_shifted,
+    should_extend_watch,
+    should_write_runner,
+)
 from src.odds_board import pivot_odds
 from src.odds_math import is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
 from src.telegram_notify import format_alert, should_alert
@@ -366,6 +374,126 @@ def test_plan_auto_uses_actual_post_times():
     assert hv_near.action == "monitor"
 
 
+def test_race_event_guards():
+    assert is_race_off("Abandoned")
+    assert is_race_off("CANCELLED")
+    assert is_race_off("Void")
+    assert is_race_off("Postponed")
+    assert not is_race_off("Declared")
+    assert not is_race_off("Closed")
+    assert is_race_resulted("Resulted")
+    assert is_horse_scratched("Scratched")
+    assert is_horse_scratched("Withdrawn")
+    assert is_horse_scratched("Standby")
+    assert not should_write_runner("Declared", None)
+    assert not should_write_runner("Scratched", 3.5)
+    assert should_write_runner("Declared", 4.2)
+    old = parse_hk("2026-11-18 15:00:00")
+    assert post_times_shifted(old, parse_hk("2026-11-18 15:20:00"))
+    assert not post_times_shifted(old, parse_hk("2026-11-18 15:00:30"))
+    assert should_extend_watch("Declared", -8.0)
+    assert not should_extend_watch("Abandoned", -8.0)
+    assert not should_extend_watch("Resulted", -1.0)
+
+
+def test_snapshot_skips_cancelled_scratch_and_blank_odds():
+    import src.monitor as monitor_mod
+
+    original = monitor_mod.now_hk
+    monitor_mod.now_hk = lambda: parse_hk("2026-11-18 14:59:00")
+    try:
+        cfg = {"data": {"brown_grid_drop_pct": 50, "checkpoints_minutes": [15, 10, 5, 1, 0]}}
+        cancelled = RaceInfo(race_no=1, post_time="15:00:00", status="Abandoned")
+        meeting = Meeting(race_date="2026-11-18", venue="ST", races=[cancelled])
+        assert (
+            snapshot_race(
+                cfg,
+                meeting,
+                cancelled,
+                [RunnerOdds(1, "甲", 4.0, 1.8, "Declared")],
+                {},
+                set(),
+                set(),
+            )
+            == []
+        )
+        live = RaceInfo(
+            race_no=2,
+            post_time="15:00:00",
+            status="Declared",
+            runner_status={2: "Scratched"},
+        )
+        meeting = Meeting(race_date="2026-11-18", venue="ST", races=[live])
+        rows = snapshot_race(
+            cfg,
+            meeting,
+            live,
+            [
+                RunnerOdds(1, "甲", 4.0, 1.8, "Declared"),
+                RunnerOdds(2, "乙", None, None, "Scratched"),
+                RunnerOdds(3, "丙", None, None, "Declared"),
+            ],
+            {},
+            set(),
+            set(),
+        )
+        assert [int(r["horse_no"]) for r in rows] == [1]
+        assert rows[0]["checkpoint"] == "T-1"
+        assert rows[0]["win_odds"] == 4.0
+    finally:
+        monitor_mod.now_hk = original
+
+
+def test_drop_date_removes_only_that_day():
+    import shutil
+    import tempfile
+
+    from src import csv_store as cs
+
+    original = {key: getattr(cs, key) for key in (
+        "DATA_DIR", "DOCS_DATA", "ODDS_PATH", "RESULTS_PATH", "BOARD_PATH",
+        "WIN_BOARD_PATH", "PLACE_BOARD_PATH", "ORIGIN_PATH", "DOCS_ORIGIN_PATH",
+    )}
+    root = Path(tempfile.mkdtemp())
+    try:
+        cs.DATA_DIR = root
+        cs.DOCS_DATA = root / "docs"
+        cs.ODDS_PATH = root / "odds_snapshots.csv"
+        cs.RESULTS_PATH = root / "race_results.csv"
+        cs.BOARD_PATH = root / "odds_board.csv"
+        cs.WIN_BOARD_PATH = root / "win_board.csv"
+        cs.PLACE_BOARD_PATH = root / "place_board.csv"
+        cs.ORIGIN_PATH = root / "dataset_origin.json"
+        cs.DOCS_ORIGIN_PATH = root / "docs" / "dataset_origin.json"
+        cs.set_dataset_origin("live", "test")
+        cs.upsert_odds([
+            {"race_date": "2026-11-18", "venue": "ST", "race_no": "1", "checkpoint": "T-1",
+             "horse_no": "1", "win_odds": "4.0", "place_odds": "1.8", "is_brown_grid": "false",
+             "scheduled_time": "15:00:00", "capture_timestamp": "", "horse_name": "甲",
+             "prev_win_odds": "", "win_drop_pct": "0"},
+            {"race_date": "2026-11-15", "venue": "HV", "race_no": "2", "checkpoint": "T-1",
+             "horse_no": "3", "win_odds": "5.0", "place_odds": "2.0", "is_brown_grid": "false",
+             "scheduled_time": "19:00:00", "capture_timestamp": "", "horse_name": "乙",
+             "prev_win_odds": "", "win_drop_pct": "0"},
+        ])
+        cs.upsert_results([
+            {"race_date": "2026-11-18", "venue": "ST", "race_no": "1", "horse_no": "1",
+             "horse_name": "甲", "finish_rank": "1", "final_sp": "4.0", "win_dividend": "40",
+             "placedividend": "16"},
+            {"race_date": "2026-11-15", "venue": "HV", "race_no": "2", "horse_no": "3",
+             "horse_name": "乙", "finish_rank": "2", "final_sp": "5.0", "win_dividend": "",
+             "placedividend": "18"},
+        ])
+        n_odds, n_res = cs.drop_date("2026-11-18")
+        assert n_odds == 1 and n_res == 1
+        assert [r["race_date"] for r in cs.load_odds()] == ["2026-11-15"]
+        assert [r["race_date"] for r in cs.load_results()] == ["2026-11-15"]
+    finally:
+        for key, value in original.items():
+            setattr(cs, key, value)
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_ticket_pnl_scales_hkjc_ten_dollar_unit():
     assert ticket_pnl(60, 10) == 50
     assert ticket_pnl(60, 10000) == 50000
@@ -562,6 +690,9 @@ if __name__ == "__main__":
     test_winplaodds_string_keeps_pools_apart()
     test_telegram_uses_own_checkpoint_odds_and_bet_label()
     test_plan_auto_uses_actual_post_times()
+    test_race_event_guards()
+    test_snapshot_skips_cancelled_scratch_and_blank_odds()
+    test_drop_date_removes_only_that_day()
     test_yearly_bets_is_frequency_times_race_days()
     test_first_live_upsert_drops_demo_rows()
     test_restore_monitor_state_and_handoff_budget()

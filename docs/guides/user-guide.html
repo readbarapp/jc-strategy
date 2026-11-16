@@ -106,6 +106,7 @@
 <li><strong>只看符合策略</strong>：跟<strong>策略回測</strong>頁而家嘅設定揀馬（選定時間點嘅獨贏啡格 ∩ 獨贏賠率範圍 ∩ 啡格門檻）。獨贏、位置、賽果三張表都係同一批馬。投注方法只影響回測點計錢，唔影響呢個 filter。</li>
 <li><strong>賽果派彩</strong>：官方名次同每 $10 派彩。開住啡格或者策略 filter 就只顯示對應嗰啲馬。</li>
 <li><strong>單次快照 / 收取賽果</strong>：排程失手或者想即刻補數先用。</li>
+<li><strong>刪除所選日期嘅紀錄</strong>：表上面揀日期（或填可選日期），刪嗰日全部賠率同賽果。要 PAT。GitHub 舊 commit 仍可還原。</li>
 </ul>
 <h3>策略回測 · 蒙地卡羅</h3>
 <p>揀馬永遠用 <strong>獨贏啡格 + 獨贏賠率範圍</strong>。之後先決定點結算：</p>
@@ -126,8 +127,21 @@
 <ul>
 <li><strong>單次快照</strong>：而家即刻抄一輪所有場次（用嚟補漏，唔係完整時間序列）</li>
 <li><strong>收取賽果</strong>：只抄派彩，唔抄即時賠率</li>
+<li><strong>刪除所選日期嘅紀錄</strong>：清走某一日嘅古怪列，然後再用上面兩個掣補數</li>
 </ul>
 <p>GitHub → Actions → HKJC Monitor → Run workflow，可以選 <code>auto</code> / <code>monitor</code> / <code>results</code> / <code>once</code> / <code>test-telegram</code>，日期空白就當今日香港日期。</p>
+<hr />
+<h2>特別情況（延誤／取消／退出）同錯數點清</h2>
+<p>監控會大約每 45 秒再問一次馬會賽程。</p>
+<ul>
+<li>開跑時間改咗 ≥ 2 分鐘：刪嗰場舊時間點，跟新鐘再抄。</li>
+<li>單場取消／中止／void：停抄嗰場，唔收垃圾賽果。</li>
+<li>成日賽取消或賽程消失：停抄賠率，改試收已跑完嘅賽果。</li>
+<li>延誤但馬會未改鐘：唔會當完場；等到狀態變或者改鐘，最多再等 3 小時。</li>
+<li>退出／SCR／後備馬：唔寫入、唔推 Telegram；已寫過會刪走嗰隻。</li>
+<li>仍然見到古怪列：揀嗰日 → <strong>刪除所選日期嘅紀錄</strong> → <strong>收取賽果</strong> 或 <strong>單次快照</strong>。</li>
+</ul>
+<p>回測只計有觸發 + 有官方派彩嘅馬。開跑前已送出嘅 Telegram 啡格收唔返。</p>
 <hr />
 <h2>常見問題</h2>
 <p><strong>點解表入面有舊日子但寫住示範數據？</strong>  </p>
