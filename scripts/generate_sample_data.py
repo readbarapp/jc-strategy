@@ -13,20 +13,20 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.csv_store import copy_to_docs, write_rows  # noqa: E402
+from src.csv_store import copy_to_docs, rebuild_odds_board, write_rows  # noqa: E402
 from src.odds_math import is_brown_grid, win_drop_pct  # noqa: E402
 from src.schema import ODDS_FIELDS, RESULTS_FIELDS  # noqa: E402
 from src.timeutil import combine_hk  # noqa: E402
 
 HORSES = [
-    "GOLDEN JOURNEY", "SILENT STORM", "LUCKY STAR", "PACIFIC PEARL",
-    "DRAGON FIRE", "HARMONY KING", "FORTUNE WHEEL", "CELESTIAL PATH",
-    "IRON WARRIOR", "RED FORTUNE", "WINNING HEART", "MOONLIT BAY",
-    "SUPER EXPRESS", "TRUE BELIEVER", "RAPID ARROW", "SKYLINE DREAM",
-    "MIGHTY RIVER", "SUNLIT PEAK", "GRAND PARADE", "NOBLE SPIRIT",
-    "EASTERN WIND", "BRAVE LEGEND", "SILVER LINING", "TURBO CHARGE",
-    "VICTORY LANE", "STARLIGHT RUN", "KING'S SHIELD", "OCEAN PRIDE",
-    "FLASH POINT", "GREEN JADE", "ROYAL BANNER", "NIGHT RAID",
+    "金程千里", "沉默風暴", "幸運之星", "太平珍珠",
+    "火龍", "和諧王", "幸運輪", "天際之路",
+    "鐵甲戰士", "紅運當頭", "勝在人心", "月夜海灣",
+    "超級特快", "真心相信", "急速飛箭", "天際夢",
+    "滔滔江河", "日照山巔", "盛大巡遊", "高尚精神",
+    "東風", "英勇傳奇", "一線生機", "渦輪加速",
+    "勝利大道", "星光奔馳", "王者之盾", "海洋驕傲",
+    "閃光點", "綠翡翠", "皇家旗幟", "夜襲",
 ]
 
 MEETINGS = [
@@ -175,6 +175,7 @@ def generate(seed: int = 20261116) -> None:
 
     write_rows(ROOT / "data" / "odds_snapshots.csv", ODDS_FIELDS, odds_rows)
     write_rows(ROOT / "data" / "race_results.csv", RESULTS_FIELDS, result_rows)
+    rebuild_odds_board()
     copy_to_docs()
     print(f"Wrote {len(odds_rows)} odds rows and {len(result_rows)} result rows")
 

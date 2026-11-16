@@ -165,5 +165,75 @@
     };
   }
 
-  global.HKJCEngine = { evaluate, monteCarlo, triggers };
+  const CHECKPOINTS = ["T-15", "T-10", "T-5", "T-3", "T-1", "T-0"];
+  const CP_SUFFIX = { "T-15": "t15", "T-10": "t10", "T-5": "t5", "T-3": "t3", "T-1": "t1", "T-0": "t0" };
+
+  function pivotOdds(rows, threshold) {
+    const grouped = new Map();
+    for (const row of rows) {
+      const cp = row.checkpoint;
+      if (!CP_SUFFIX[cp]) continue;
+      const key = `${row.race_date}|${row.venue}|${row.race_no}|${row.horse_no}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          race_date: row.race_date,
+          venue: row.venue,
+          race_no: row.race_no,
+          scheduled_time: row.scheduled_time,
+          horse_no: row.horse_no,
+          horse_name: row.horse_name,
+          odds: {},
+        });
+      }
+      const item = grouped.get(key);
+      if (row.horse_name) item.horse_name = row.horse_name;
+      if (row.scheduled_time) item.scheduled_time = row.scheduled_time;
+      item.odds[cp] = num(row.win_odds, NaN);
+    }
+    const wide = [];
+    for (const item of grouped.values()) {
+      const out = {
+        race_date: item.race_date,
+        venue: item.venue,
+        race_no: item.race_no,
+        scheduled_time: item.scheduled_time,
+        horse_no: item.horse_no,
+        horse_name: item.horse_name,
+      };
+      const brownAt = [];
+      let prevCp = null;
+      for (const cp of CHECKPOINTS) {
+        const suffix = CP_SUFFIX[cp];
+        const current = item.odds[cp];
+        out["win_" + suffix] = Number.isFinite(current) ? current : "";
+        if (!prevCp) {
+          prevCp = cp;
+          continue;
+        }
+        const prev = item.odds[prevCp];
+        let drop = 0;
+        if (Number.isFinite(prev) && prev > 0 && Number.isFinite(current)) {
+          drop = Math.round(((prev - current) / prev) * 10000) / 100;
+        }
+        const brown = Number.isFinite(current) && Number.isFinite(prev) && drop >= threshold;
+        out["drop_" + suffix] = drop;
+        out["brown_" + suffix] = brown;
+        if (brown) brownAt.push(cp);
+        prevCp = cp;
+      }
+      out.is_brown_grid = brownAt.length > 0;
+      out.brown_at = brownAt.join("、");
+      wide.push(out);
+    }
+    wide.sort((a, b) => {
+      if (a.race_date !== b.race_date) return a.race_date < b.race_date ? 1 : -1;
+      if (a.venue !== b.venue) return String(a.venue).localeCompare(String(b.venue));
+      const rn = Number(a.race_no) - Number(b.race_no);
+      if (rn) return rn;
+      return Number(a.horse_no) - Number(b.horse_no);
+    });
+    return wide;
+  }
+
+  global.HKJCEngine = { evaluate, monteCarlo, triggers, pivotOdds };
 })(window);

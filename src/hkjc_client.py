@@ -15,9 +15,18 @@ from .timeutil import combine_hk, parse_hk, today_hk, to_hk
 
 GRAPHQL_URL = "https://info.cld.hkjc.com/graphql/base/"
 JSON_ODDS_URL = "https://bet.hkjc.com/racing/getJSON.aspx"
-RESULTS_URL = "https://racing.hkjc.com/racing/information/English/Racing/LocalResults.aspx"
-FIXTURE_URL = "https://racing.hkjc.com/racing/information/English/Racing/Fixture.aspx"
+RESULTS_URL = "https://racing.hkjc.com/racing/information/Chinese/Racing/LocalResults.aspx"
+FIXTURE_URL = "https://racing.hkjc.com/racing/information/Chinese/Racing/Fixture.aspx"
 LOCAL_VENUES = {"ST", "HV"}
+
+
+def horse_name_zh(runner: dict | None, horse_no: int) -> str:
+    data = runner or {}
+    chinese = str(data.get("name_ch") or "").strip()
+    if chinese:
+        return chinese
+    english = str(data.get("name_en") or "").strip()
+    return english or f"第{horse_no}號"
 
 # Verbatim whitelist queries used by bet.hkjc.com (modified queries return WHITELIST_ERROR).
 QUERY_RACE_MEETINGS_FULL = """
@@ -501,7 +510,7 @@ class HKJCClient:
                 for runner in race.get("runners") or []:
                     hno = int(runner.get("no") or 0)
                     if hno:
-                        runners[hno] = runner.get("name_en") or runner.get("name_ch") or f"Horse {hno}"
+                        runners[hno] = horse_name_zh(runner, hno)
                 races.append(
                     RaceInfo(
                         race_no=no,
@@ -597,7 +606,7 @@ class HKJCClient:
         return [
             RunnerOdds(
                 horse_no=n,
-                horse_name=names.get(n, f"Horse {n}"),
+                horse_name=names.get(n) or f"第{n}號",
                 win_odds=win_map.get(n),
                 place_odds=pla_map.get(n),
             )
@@ -634,7 +643,7 @@ class HKJCClient:
         return [
             RunnerOdds(
                 horse_no=n,
-                horse_name=names.get(n, f"Horse {n}"),
+                horse_name=names.get(n) or f"第{n}號",
                 win_odds=win_map.get(n),
                 place_odds=pla_map.get(n),
             )
@@ -703,7 +712,7 @@ class HKJCClient:
                     "venue": meeting.venue,
                     "race_no": race_no,
                     "horse_no": n,
-                    "horse_name": names.get(n, f"Horse {n}"),
+                    "horse_name": names.get(n) or f"第{n}號",
                     "finish_rank": "",
                     "final_sp": "",
                     "win_dividend": win_div.get(n, 0) or 0,
@@ -724,26 +733,36 @@ class HKJCClient:
             log_exception("LocalResults fetch failed", exc)
             return []
         soup = BeautifulSoup(html, "html.parser")
-        performance = self._find_table(soup, ["Pla", "Horse No", "Horse", "Win Odds"])
+        performance = self._find_table(soup, ["名次", "馬號", "馬名"])
         if performance is None:
-            performance = self._find_table(soup, ["名次", "馬號", "馬名"])
+            performance = self._find_table(soup, ["Pla", "Horse No", "Horse", "Win Odds"])
         if performance is None:
             return []
         rows_out: list[dict] = []
         header_cells = performance.find_all("tr")[0].find_all(["td", "th"])
-        header_names = [c.get_text(" ", strip=True).lower() for c in header_cells]
+        header_names = [c.get_text(" ", strip=True) for c in header_cells]
+        header_lower = [h.lower() for h in header_names]
 
         def col(*names: str) -> int | None:
             for i, h in enumerate(header_names):
                 for name in names:
-                    if name.lower() in h:
+                    if name and name in h:
+                        return i
+            for i, h in enumerate(header_lower):
+                for name in names:
+                    if name and name.lower() in h:
                         return i
             return None
 
-        idx_pla = col("pla", "名次")
-        idx_no = col("horse no", "馬號")
-        idx_name = col("horse", "馬名")
-        idx_odds = col("win odds", "獨贏賠率")
+        idx_pla = col("名次", "pla.")
+        idx_no = col("馬號", "horse no")
+        idx_name = col("馬名")
+        if idx_name is None:
+            for i, h in enumerate(header_lower):
+                if h.strip() in {"horse", "horse name"}:
+                    idx_name = i
+                    break
+        idx_odds = col("獨贏賠率", "win odds")
         for tr in performance.find_all("tr")[1:]:
             cells = [c.get_text(" ", strip=True) for c in tr.find_all(["td", "th"])]
             if len(cells) < 4:
@@ -753,8 +772,8 @@ class HKJCClient:
                 continue
             rank_raw = cells[idx_pla] if idx_pla is not None else ""
             rank = self._to_int(re.sub(r"[^0-9]", "", rank_raw.split()[0] if rank_raw else ""))
-            name = cells[idx_name] if idx_name is not None else f"Horse {horse_no}"
-            name = re.sub(r"\s*\([A-Z]\d+\)\s*$", "", name).strip()
+            name = cells[idx_name] if idx_name is not None else f"第{horse_no}號"
+            name = re.sub(r"\s*\([A-Z]\d+\)\s*$", "", name).strip() or f"第{horse_no}號"
             sp = parse_odds(cells[idx_odds] if idx_odds is not None else None)
             rows_out.append(
                 {

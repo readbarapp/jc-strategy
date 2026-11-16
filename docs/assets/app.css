@@ -44,6 +44,11 @@ body { font-family: "IBM Plex Sans", "Noto Sans TC", system-ui, sans-serif; }
   background: rgba(180,83,9,.22) !important;
   color: #fde68a;
 }
+.grid-table td.cell-brown {
+  background: rgba(146, 64, 14, 0.55) !important;
+  color: #fde68a;
+  font-weight: 600;
+}
 .chip-on {
   background: rgba(228,195,106,.2);
   color: #fde68a;

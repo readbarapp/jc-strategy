@@ -17,7 +17,8 @@
 config.json                     策略、啡格門檻、Telegram、抓取間隔
 scraper_runner.py               Actions 進入點
 src/                            時間、HKJC client、監控、Telegram、回測
-data/odds_snapshots.csv         賠率走勢（T-15…T-0）
+data/odds_snapshots.csv         賠率走勢長表（每個時間點一列，供監控寫入）
+data/odds_board.csv             一馬一行寬表（開賽前 15/10/5/3/1 分鐘＋開跑）
 data/race_results.csv           官方名次與每 $10 派彩
 logs/latest.log                 爬蟲即時日誌
 status.json                     給 Pages 讀的系統狀態
@@ -114,13 +115,29 @@ GitHub Pages 本身是靜態的。要從瀏覽器改 repo 檔案或觸發 Action
 
 ## 4. 數據欄位
 
+馬名一律優先用 **中文名**（GraphQL `name_ch`／中文賽果頁）。
+
+### 示範數據 vs 真實數據
+
+`scripts/generate_sample_data.py` 產生的歷史賽日是 **模擬示範數據**（假數據），方便 Pages 一打開就能回測，**不是**馬會官方紀錄。GitHub Actions 在真正的香港賽馬日會把真實賠率／賽果追加進同一個 CSV。
+
+### 數據中心「賠率走勢」
+
+畫面是 **一隻馬一行**，欄位為開賽前 15、10、5、3、1 分鐘及開跑的實際獨贏賠率。
+
+**啡格**：該時間點的獨贏較 **上一個時間點** 下跌 ≥ 門檻（預設 50%）。例如開賽前 1 分鐘比 3 分鐘低 50%，T-1 格會標啡色。
+
 ### `data/odds_snapshots.csv`
 
-`race_date, venue, race_no, scheduled_time, checkpoint, capture_timestamp, horse_no, horse_name, win_odds, place_odds, prev_win_odds, win_drop_pct, is_brown_grid`
+監控寫入的長表：`race_date, venue, race_no, scheduled_time, checkpoint, capture_timestamp, horse_no, horse_name, win_odds, place_odds, prev_win_odds, win_drop_pct, is_brown_grid`
 
-- `checkpoint`：`T-15` `T-10` `T-5` `T-3` `T-1` `T-0`（或急跌時的 `ALERT`）
-- `win_drop_pct`：相對**上一個時間點**的獨贏跌幅（%），正數代表縮價
-- `is_brown_grid`：`win_drop_pct >=` 設定門檻（預設 50%）
+- `checkpoint`：`T-15` `T-10` `T-5` `T-3` `T-1` `T-0`
+- `prev_win_odds` / `win_drop_pct`：相對 **上一個 checkpoint**（不是 10 秒一跳）
+- `is_brown_grid`：該 checkpoint 跌幅 ≥ 門檻
+
+### `data/odds_board.csv`
+
+同一批數據轉成一馬一行，供下載與核對。網頁「下載完整賠率數據 CSV」匯出的是這個寬表。
 
 ### `data/race_results.csv`
 

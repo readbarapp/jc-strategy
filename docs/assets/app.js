@@ -2,12 +2,32 @@
 (function () {
   const { formatHk, weekdayZh, parseCsv, toCsv, downloadBlob, detectRepo, saveRepo,
     loadRelativeOrRaw, ghPutFile, ghDispatch, ghLatestRun, num, isTrue } = window.HKJC;
-  const { evaluate, monteCarlo } = window.HKJCEngine;
+  const { evaluate, monteCarlo, pivotOdds } = window.HKJCEngine;
 
-  const ODDS_FIELDS = [
-    "race_date", "venue", "race_no", "scheduled_time", "checkpoint", "capture_timestamp",
-    "horse_no", "horse_name", "win_odds", "place_odds", "prev_win_odds", "win_drop_pct", "is_brown_grid",
+  const ODDS_BOARD_COLS = [
+    { key: "win_t15", label: "開賽前15分鐘", brownKey: null },
+    { key: "win_t10", label: "開賽前10分鐘", brownKey: "brown_t10" },
+    { key: "win_t5", label: "開賽前5分鐘", brownKey: "brown_t5" },
+    { key: "win_t3", label: "開賽前3分鐘", brownKey: "brown_t3" },
+    { key: "win_t1", label: "開賽前1分鐘", brownKey: "brown_t1" },
+    { key: "win_t0", label: "開跑", brownKey: "brown_t0" },
   ];
+  const WIDE_EXPORT_PAIRS = [
+    ["race_date", "日期"],
+    ["venue", "場地"],
+    ["race_no", "場次"],
+    ["scheduled_time", "開跑時間"],
+    ["horse_no", "馬號"],
+    ["horse_name", "馬名"],
+    ["win_t15", "開賽前15分鐘"],
+    ["win_t10", "開賽前10分鐘"],
+    ["win_t5", "開賽前5分鐘"],
+    ["win_t3", "開賽前3分鐘"],
+    ["win_t1", "開賽前1分鐘"],
+    ["win_t0", "開跑"],
+    ["brown_at", "啡格時間點"],
+  ];
+
   const RESULT_FIELDS = [
     "race_date", "venue", "race_no", "horse_no", "horse_name", "finish_rank", "final_sp", "win_dividend", "placedividend",
   ];
@@ -52,8 +72,8 @@
     return num($("brown-threshold") && $("brown-threshold").value, 50);
   }
 
-  function isBrownLive(row) {
-    return isTrue(row.is_brown_grid) || num(row.win_drop_pct, 0) >= currentThreshold();
+  function oddsBoard() {
+    return pivotOdds(state.odds, currentThreshold());
   }
 
   function tickClock() {
@@ -94,7 +114,7 @@
       renderDataTable();
       renderStatus();
       runStrategy();
-      toast(`已載入賠率 ${state.odds.length} 列、賽果 ${state.results.length} 列`, "ok");
+      toast(`已載入 ${oddsBoard().length} 匹馬賠率走勢、賽果 ${state.results.length} 列（示範歷史為模擬數據）`, "ok");
     } catch (err) {
       toast(err.message || String(err), "error");
     }
@@ -164,15 +184,20 @@
     const race = $("filter-race").value;
     const horse = $("filter-horse").value.trim();
     const brown = $("filter-brown").checked;
-    const src = state.tableSource === "results" ? state.results : state.odds;
+    const src = state.tableSource === "results" ? state.results : oddsBoard();
     return src.filter((row) => {
       if (date && row.race_date !== date) return false;
       if (venue && row.venue !== venue) return false;
       if (race && String(row.race_no) !== race) return false;
       if (horse && String(row.horse_no) !== horse) return false;
-      if (brown && state.tableSource === "odds" && !isBrownLive(row)) return false;
+      if (brown && state.tableSource === "odds" && !isTrue(row.is_brown_grid) && !row.brown_at) return false;
       return true;
     });
+  }
+
+  function fmtOdds(v) {
+    if (v === "" || v == null || Number.isNaN(Number(v))) return "—";
+    return Number(v).toFixed(1);
   }
 
   function renderDataTable() {
@@ -181,46 +206,61 @@
     const pages = Math.max(1, Math.ceil(rows.length / pageSize));
     if (state.page > pages) state.page = pages;
     const slice = rows.slice((state.page - 1) * pageSize, state.page * pageSize);
-    $("table-meta").textContent = `顯示 ${rows.length} / 原始 ${
-      state.tableSource === "results" ? state.results.length : state.odds.length
-    } 列 · 第 ${state.page}/${pages} 頁`;
-    const fields = state.tableSource === "results" ? RESULT_FIELDS : ODDS_FIELDS;
-    const labels = {
-      race_date: "日期",
-      venue: "場地",
-      race_no: "場次",
-      scheduled_time: "開跑",
-      checkpoint: "節點",
-      capture_timestamp: "捕捉時間",
-      horse_no: "馬號",
-      horse_name: "馬名",
-      win_odds: "獨贏",
-      place_odds: "位置",
-      prev_win_odds: "上一賠率",
-      win_drop_pct: "跌幅%",
-      is_brown_grid: "啡格",
-      finish_rank: "名次",
-      final_sp: "終賠",
-      win_dividend: "獨贏派彩",
-      placedividend: "位置派彩",
-    };
-    $("data-head").innerHTML =
-      "<tr>" + fields.map((f) => `<th>${labels[f] || f}</th>`).join("") + "</tr>";
-    $("data-body").innerHTML = slice
-      .map((row) => {
-        const brown = state.tableSource === "odds" && isBrownLive(row);
-        const tds = fields
-          .map((f) => {
-            let v = row[f];
-            if (f === "venue") v = venueName(v);
-            if (f === "is_brown_grid") v = brown ? "YES" : "";
-            if (f === "win_drop_pct" && v !== "" && v != null) v = Number(v).toFixed(2);
-            return `<td>${v == null || v === "" ? "—" : v}</td>`;
-          })
-          .join("");
-        return `<tr class="${brown ? "row-brown" : ""}">${tds}</tr>`;
-      })
-      .join("");
+    if (state.tableSource === "results") {
+      $("table-meta").textContent = `顯示 ${rows.length} / ${state.results.length} 列 · 第 ${state.page}/${pages} 頁`;
+      const labels = {
+        race_date: "日期",
+        venue: "場地",
+        race_no: "場次",
+        horse_no: "馬號",
+        horse_name: "馬名",
+        finish_rank: "名次",
+        final_sp: "終賠",
+        win_dividend: "獨贏派彩",
+        placedividend: "位置派彩",
+      };
+      $("data-head").innerHTML =
+        "<tr>" + RESULT_FIELDS.map((f) => `<th>${labels[f] || f}</th>`).join("") + "</tr>";
+      $("data-body").innerHTML = slice
+        .map((row) => {
+          const tds = RESULT_FIELDS
+            .map((f) => {
+              let v = row[f];
+              if (f === "venue") v = venueName(v);
+              return `<td>${v == null || v === "" ? "—" : v}</td>`;
+            })
+            .join("");
+          return `<tr>${tds}</tr>`;
+        })
+        .join("");
+    } else {
+      $("table-meta").textContent = `顯示 ${rows.length} 匹馬 · 第 ${state.page}/${pages} 頁 · 啡格 = 該時間點獨贏較上一節點跌 ≥ ${currentThreshold()}%`;
+      $("data-head").innerHTML = `<tr>
+        <th>日期</th><th>場地</th><th>場次</th><th>開跑</th><th>馬號</th><th>馬名</th>
+        ${ODDS_BOARD_COLS.map((c) => `<th>${c.label}</th>`).join("")}
+        <th>啡格時間點</th>
+      </tr>`;
+      $("data-body").innerHTML = slice
+        .map((row) => {
+          const cells = ODDS_BOARD_COLS.map((c) => {
+            const brown = c.brownKey && isTrue(row[c.brownKey]);
+            return `<td class="${brown ? "cell-brown" : ""}">${fmtOdds(row[c.key])}</td>`;
+          }).join("");
+          const flag = row.brown_at
+            ? `<td class="cell-brown">${row.brown_at}</td>`
+            : `<td>—</td>`;
+          return `<tr>
+            <td>${row.race_date}</td>
+            <td>${venueName(row.venue)}</td>
+            <td>${row.race_no}</td>
+            <td>${row.scheduled_time || "—"}</td>
+            <td>${row.horse_no}</td>
+            <td>${row.horse_name || "—"}</td>
+            ${cells}${flag}
+          </tr>`;
+        })
+        .join("");
+    }
     $("page-indicator").textContent = `${state.page} / ${pages}`;
   }
 
@@ -515,7 +555,18 @@
       renderDataTable();
     });
     $("dl-odds").addEventListener("click", () => {
-      downloadBlob("odds_snapshots.csv", toCsv(state.odds, ODDS_FIELDS), "text/csv;charset=utf-8");
+      const wide = oddsBoard();
+      const labels = WIDE_EXPORT_PAIRS.map((p) => p[1]);
+      const keys = WIDE_EXPORT_PAIRS.map((p) => p[0]);
+      const esc = (v) => {
+        const s = v == null ? "" : String(v);
+        return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const lines = [labels.join(",")];
+      for (const row of wide) {
+        lines.push(keys.map((k) => esc(k === "venue" ? venueName(row[k]) : (isTrue(row[k]) ? "是" : row[k] === false ? "否" : row[k]))).join(","));
+      }
+      downloadBlob("odds_board.csv", lines.join("\n") + "\n", "text/csv;charset=utf-8");
     });
     $("dl-results").addEventListener("click", () => {
       downloadBlob("race_results.csv", toCsv(state.results, RESULT_FIELDS), "text/csv;charset=utf-8");
