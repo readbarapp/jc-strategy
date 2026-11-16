@@ -23,6 +23,7 @@ DEFAULTS: dict[str, Any] = {
         "monitor_lead_minutes": 20,
         "monitor_trail_minutes": 25,
         "max_wait_before_monitor_minutes": 45,
+        "max_delay_extend_minutes": 180,
     },
     "strategy": {
         "min_odds": 3.5,

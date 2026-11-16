@@ -30,6 +30,10 @@
   const RESULT_FIELDS = [
     "race_date", "venue", "race_no", "horse_no", "horse_name", "finish_rank", "final_sp", "win_dividend", "placedividend",
   ];
+  const ODDS_SNAPSHOT_FIELDS = [
+    "race_date", "venue", "race_no", "scheduled_time", "checkpoint", "capture_timestamp",
+    "horse_no", "horse_name", "win_odds", "place_odds", "prev_win_odds", "win_drop_pct", "is_brown_grid",
+  ];
 
   const state = {
     tab: "data",
@@ -718,6 +722,51 @@
     }
   }
 
+  async function purgeSelectedDate() {
+    persistGithubForm();
+    const date =
+      ($("filter-date") && $("filter-date").value) ||
+      ($("force-date") && $("force-date").value.trim()) ||
+      "";
+    if (!date) {
+      toast("先喺表上面揀要刪嘅日期，或填「可選日期」", "error");
+      return;
+    }
+    if (!state.github.token) {
+      toast("刪除紀錄要喺狀態頁貼 PAT", "error");
+      return;
+    }
+    const ok = window.confirm(
+      `確定刪除 ${date} 全部賠率同賽果？策略回測會即時少呢一日。GitHub 舊 commit 仍可還原。`
+    );
+    if (!ok) return;
+    const oddsKeep = state.odds.filter((row) => row.race_date !== date);
+    const resKeep = state.results.filter((row) => row.race_date !== date);
+    const removed = state.odds.length - oddsKeep.length + state.results.length - resKeep.length;
+    if (!removed) {
+      toast(`${date} 冇任何列可刪`, "info");
+      return;
+    }
+    try {
+      const oddsCsv = toCsv(oddsKeep, ODDS_SNAPSHOT_FIELDS);
+      const resCsv = toCsv(resKeep, RESULT_FIELDS);
+      const message = `data: drop ${date} records from Pages desk`;
+      await ghPutFile(state.github, "data/odds_snapshots.csv", oddsCsv, message);
+      await ghPutFile(state.github, "docs/data/odds_snapshots.csv", oddsCsv, message);
+      await ghPutFile(state.github, "data/race_results.csv", resCsv, message);
+      await ghPutFile(state.github, "docs/data/race_results.csv", resCsv, message);
+      state.odds = oddsKeep;
+      state.results = resKeep;
+      fillFilterOptions();
+      state.page = 1;
+      renderDataTable();
+      runStrategy();
+      toast(`已刪 ${date}（${removed} 列）並寫入 GitHub`, "ok");
+    } catch (err) {
+      toast(err.message || String(err), "error");
+    }
+  }
+
   async function trigger(command) {
     persistGithubForm();
     try {
@@ -887,6 +936,7 @@
     $("btn-monitor").addEventListener("click", () => trigger("auto"));
     $("btn-once").addEventListener("click", () => trigger("once"));
     $("btn-results").addEventListener("click", () => trigger("results"));
+    if ($("btn-purge-date")) $("btn-purge-date").addEventListener("click", purgeSelectedDate);
     $("btn-tg-test").addEventListener("click", testTelegram);
   }
 

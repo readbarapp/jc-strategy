@@ -13,6 +13,18 @@ from .config import brown_grid_threshold, load_config, scrape_interval
 from .hkjc_client import HKJCClient, Meeting
 from .logger import log, log_exception
 from .odds_math import DEFAULT_CHECKPOINTS, is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
+from .race_events import (
+    KEEP_ALIVE_MINUTES,
+    MAX_DELAY_EXTEND_MINUTES,
+    is_horse_scratched,
+    is_meeting_off,
+    is_race_off,
+    is_race_resulted,
+    post_times_shifted,
+    race_is_over,
+    should_extend_watch,
+    should_write_runner,
+)
 from .status import load_status, write_status
 from .timeutil import format_hk, minutes_until, now_hk, plus_minutes, to_hk, today_hk
 
@@ -98,9 +110,56 @@ def _bool_str(value: bool) -> str:
     return "true" if value else "false"
 
 
+def _clear_race_capture(
+    captured: set[tuple[int, int, str]],
+    checkpoint_odds: dict[tuple[int, int], float],
+    race_no: int,
+) -> None:
+    captured.difference_update({ck for ck in list(captured) if ck[0] == race_no})
+    for key in [item for item in list(checkpoint_odds) if item[0] == race_no]:
+        del checkpoint_odds[key]
+
+
+def refresh_meeting_schedule(
+    client: HKJCClient,
+    meeting: Meeting,
+    captured: set[tuple[int, int, str]],
+    checkpoint_odds: dict[tuple[int, int], float],
+) -> tuple[Meeting | None, bool]:
+    """Re-read official postTime/status. True = meeting cancelled or vanished."""
+    latest = client.fetch_meeting(meeting.race_date, meeting.venue)
+    if latest is None or not latest.races or is_meeting_off(latest.status):
+        log(
+            f"Meeting {meeting.race_date} {meeting.venue} gone or off "
+            f"(status={getattr(latest, 'status', '') or 'missing'})"
+        )
+        return latest, True
+    old_by_no = {race.race_no: race for race in meeting.races}
+    for race in latest.races:
+        prev = old_by_no.get(race.race_no)
+        if prev is None:
+            continue
+        if post_times_shifted(
+            client.scheduled_datetime(meeting, prev),
+            client.scheduled_datetime(latest, race),
+        ):
+            log(
+                f"R{race.race_no} postTime {prev.post_time or '—'} → {race.post_time or '—'}; "
+                "drop stale checkpoints and recapture"
+            )
+            csv_store.drop_odds_for_race(latest.race_date, latest.venue, race.race_no)
+            _clear_race_capture(captured, checkpoint_odds, race.race_no)
+        if is_race_off(race.status) and not is_race_off(prev.status):
+            log(f"R{race.race_no} marked {race.status} — stop capturing this race")
+    return latest, False
+
+
 def collect_results(client: HKJCClient, meeting: Meeting) -> int:
     all_rows: list[dict] = []
     for race in meeting.races:
+        if is_race_off(race.status) or is_meeting_off(meeting.status):
+            log(f"Skip results R{race.race_no}: status={race.status or meeting.status or 'off'}")
+            continue
         try:
             rows = client.fetch_results(meeting, race.race_no)
         except Exception as exc:
@@ -130,6 +189,8 @@ def snapshot_race(
 
     啡格 is vs the previous checkpoint (e.g. T-1 vs T-5), not vs the last 10s tick.
     """
+    if is_race_off(getattr(race, "status", "")) or is_meeting_off(getattr(meeting, "status", "")):
+        return []
     now = now_hk()
     post = HKJCClient.scheduled_datetime(meeting, race)
     if post:
@@ -138,25 +199,35 @@ def snapshot_race(
             minutes, cfg.get("data", {}).get("checkpoints_minutes") or DEFAULT_CHECKPOINTS
         )
     else:
-        checkpoint = "T-0"
+        checkpoint = None
     if not checkpoint:
         return []
     threshold = brown_grid_threshold(cfg)
     scheduled = post.strftime("%H:%M:%S") if post else (race.post_time or "")
     capture_ts = format_hk(now)
     out: list[dict] = []
+    runner_status = getattr(race, "runner_status", {}) or {}
     for runner in runners:
+        status = getattr(runner, "status", "") or runner_status.get(runner.horse_no, "")
         win = parse_odds(runner.win_odds)
         pla = parse_odds(runner.place_odds)
         key = (race.race_no, runner.horse_no)
+        if is_horse_scratched(status):
+            stale = {ck for ck in captured if ck[0] == race.race_no and ck[1] == runner.horse_no}
+            if stale:
+                csv_store.drop_horse_odds(meeting.race_date, meeting.venue, race.race_no, runner.horse_no)
+                captured.difference_update(stale)
+                checkpoint_odds.pop(key, None)
+            continue
+        if not should_write_runner(status, win):
+            continue
         ck = (race.race_no, runner.horse_no, checkpoint)
         if ck in captured:
             continue
         prev = checkpoint_odds.get(key)
         drop = win_drop_pct(prev, win) if prev is not None else 0.0
         brown = is_brown_grid(drop, threshold)
-        if win is not None:
-            checkpoint_odds[key] = win
+        checkpoint_odds[key] = win
         captured.add(ck)
         row = {
             "race_date": meeting.race_date,
@@ -205,8 +276,10 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
     now = now_hk()
     lead = int(cfg["data"].get("monitor_lead_minutes", 20))
     trail = int(cfg["data"].get("monitor_trail_minutes", 25))
+    max_delay = int(cfg["data"].get("max_delay_extend_minutes", MAX_DELAY_EXTEND_MINUTES))
     start_at = min(posts) if posts else now
     end_at = plus_minutes(max(posts), trail) if posts else plus_minutes(now, 4 * 60)
+    hard_stop = plus_minutes(max(posts), max_delay) if posts else plus_minutes(now, max_delay)
     first_watch = plus_minutes(start_at, -lead) if posts else now
 
     write_status(
@@ -230,27 +303,49 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
     checkpoint_odds, captured, alerted = restore_monitor_state(meeting)
     monitored: list[int] = []
     last_commit = time.time()
+    last_refresh = 0.0
     log(
         f"High-frequency monitor start {meeting.race_date} {meeting.venue} "
         f"interval={scrape_interval(cfg)}s until {format_hk(end_at)}"
     )
 
-    while now_hk() <= end_at:
+    while now_hk() <= end_at and now_hk() <= hard_stop:
         if should_handoff():
             return _handoff(meeting)
         cfg = load_config()
         interval = scrape_interval(cfg)
         idle = max(interval, int(cfg["data"].get("idle_poll_seconds", 60)))
+        if time.time() - last_refresh >= 45:
+            latest, cancelled = refresh_meeting_schedule(client, meeting, captured, checkpoint_odds)
+            last_refresh = time.time()
+            if cancelled:
+                write_status(
+                    state="running",
+                    is_race_day=True,
+                    venue=meeting.venue,
+                    race_date=meeting.race_date,
+                    last_message="馬會賽程取消或消失，停止抄賠率、改收賽果",
+                    last_sync=format_hk(now_hk()),
+                )
+                break
+            if latest:
+                meeting = latest
+        live_races = [
+            race
+            for race in meeting.races
+            if not is_race_off(race.status) and not is_race_resulted(race.status)
+        ]
+        if not live_races:
+            log("All remaining races cancelled or resulted — stop odds loop")
+            break
         tick_rows: list[dict] = []
         nearest = None
-        for race in meeting.races:
+        for race in live_races:
             post = client.scheduled_datetime(meeting, race)
-            if post:
-                delta = minutes_until(post, now_hk())
-                if nearest is None or abs(delta) < abs(nearest):
-                    nearest = delta
-            # skip races that finished more than 5 minutes ago
-            if post and minutes_until(post, now_hk()) < -5:
+            delta = minutes_until(post, now_hk()) if post else None
+            if delta is not None and (nearest is None or abs(delta) < abs(nearest)):
+                nearest = delta
+            if race_is_over(race.status, delta):
                 continue
             try:
                 runners = client.fetch_win_place_odds(meeting, race.race_no)
@@ -270,6 +365,25 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
             csv_store.upsert_odds(tick_rows)
             log(f"Wrote {len(tick_rows)} odds rows (races={monitored})")
 
+        active_posts = [
+            dt
+            for race in live_races
+            if (dt := client.scheduled_datetime(meeting, race))
+        ]
+        if active_posts:
+            end_at = plus_minutes(max(active_posts), trail)
+        if any(
+            should_extend_watch(
+                race.status,
+                minutes_until(client.scheduled_datetime(meeting, race), now_hk())
+                if client.scheduled_datetime(meeting, race)
+                else None,
+            )
+            for race in live_races
+        ):
+            end_at = max(end_at, plus_minutes(now_hk(), KEEP_ALIVE_MINUTES))
+        end_at = min(end_at, hard_stop)
+
         write_status(
             state="running",
             is_race_day=True,
@@ -284,7 +398,6 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
             gitops.persist_and_push()
             last_commit = time.time()
 
-        # Slow down when no race is within 20 minutes, and after HTTP 429/403
         sleep_for = interval if nearest is not None and nearest <= 20 else idle
         time.sleep(client.recommended_sleep(sleep_for))
 
@@ -316,6 +429,8 @@ def run_once(cfg: dict[str, Any] | None = None, race_date: str | None = None) ->
     alerted: set[tuple[int, int]] = set()
     rows: list[dict] = []
     for race in meeting.races:
+        if is_race_off(race.status):
+            continue
         runners = client.fetch_win_place_odds(meeting, race.race_no)
         rows.extend(snapshot_race(cfg, meeting, race, runners, checkpoint_odds, captured, alerted))
         time.sleep(0.2)

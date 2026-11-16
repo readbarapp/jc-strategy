@@ -160,6 +160,69 @@ def load_results() -> list[dict]:
     return read_rows(RESULTS_PATH, RESULTS_FIELDS)
 
 
+def _same_id(value, expected) -> bool:
+    return str(value or "").strip() == str(expected or "").strip()
+
+
+def drop_odds_for_race(race_date: str, venue: str, race_no) -> int:
+    """Remove snapshots for one race so a delayed postTime can be recaptured cleanly."""
+    rows = load_odds()
+    keep = [
+        row
+        for row in rows
+        if not (
+            _same_id(row.get("race_date"), race_date)
+            and _same_id(row.get("venue"), venue)
+            and _same_id(row.get("race_no"), race_no)
+        )
+    ]
+    removed = len(rows) - len(keep)
+    if removed:
+        write_rows(ODDS_PATH, ODDS_FIELDS, keep)
+        rebuild_odds_board()
+        log(f"Dropped {removed} odds rows for {race_date} {venue} R{race_no} after schedule change")
+    return removed
+
+
+def drop_horse_odds(race_date: str, venue: str, race_no, horse_no) -> int:
+    """Remove a scratched/withdrawn horse so strategy cannot pick a non-runner."""
+    rows = load_odds()
+    keep = [
+        row
+        for row in rows
+        if not (
+            _same_id(row.get("race_date"), race_date)
+            and _same_id(row.get("venue"), venue)
+            and _same_id(row.get("race_no"), race_no)
+            and _same_id(row.get("horse_no"), horse_no)
+        )
+    ]
+    removed = len(rows) - len(keep)
+    if removed:
+        write_rows(ODDS_PATH, ODDS_FIELDS, keep)
+        rebuild_odds_board()
+        log(f"Dropped {removed} odds rows for scratched {race_date} {venue} R{race_no} #{horse_no}")
+    return removed
+
+
+def drop_date(race_date: str) -> tuple[int, int]:
+    """Delete every odds and result row for one calendar date (manual repair)."""
+    odds = load_odds()
+    results = load_results()
+    keep_odds = [row for row in odds if not _same_id(row.get("race_date"), race_date)]
+    keep_results = [row for row in results if not _same_id(row.get("race_date"), race_date)]
+    n_odds = len(odds) - len(keep_odds)
+    n_results = len(results) - len(keep_results)
+    if n_odds:
+        write_rows(ODDS_PATH, ODDS_FIELDS, keep_odds)
+        rebuild_odds_board()
+    if n_results:
+        write_rows(RESULTS_PATH, RESULTS_FIELDS, keep_results)
+    if n_odds or n_results:
+        log(f"Dropped {n_odds} odds + {n_results} result rows for {race_date}")
+    return n_odds, n_results
+
+
 def copy_to_docs() -> None:
     """Mirror canonical CSVs into docs/ so GitHub Pages can read them."""
     mapping = [

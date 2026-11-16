@@ -17,6 +17,8 @@ scraper_runner.py auto
         │
         ├─ 第一次真實寫入 → 刪晒示範 CSV
         ├─ 每個時間點：GraphQL 獨贏+位置（失敗改 getJSON）
+        ├─ 約每 45 秒重讀賽程：postTime 改 ≥ 2 分鐘就刪嗰場舊 checkpoint 再抄；取消／中止停抄；SCR／後備唔寫
+        ├─ 延誤但未改鐘：唔當完場，延長監控最多 3 小時
         ├─ HTTP 429／403／斷線 → 退後 8–120 秒再試，之後減慢輪詢
         ├─ 計啡格（對上一個時間點，T-1 對 T-5）
         ├─ 符合 Telegram 規則 → Bot API 即刻 sendMessage
