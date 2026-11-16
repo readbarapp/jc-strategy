@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/app.css?v=20261116g" />
+  <link rel="stylesheet" href="./assets/app.css?v=20261116h" />
 </head>
 <body class="min-h-screen text-slate-100 rail">
   <div class="flex min-h-screen">
@@ -162,10 +162,10 @@
               <summary class="cursor-pointer text-gold-300">EV 點計（即使畫面主要見到獨贏）</summary>
               <ol class="mt-2 list-decimal space-y-1 pl-5">
                 <li>訊號永遠睇獨贏：選定時間點（例如 T-1）獨贏較上一個時間點（T-1 就係 T-5，大約 5 分鐘前）跌 ≥ 門檻，而且嗰刻獨贏喺範圍內。</li>
-                <li>只買獨贏：中就加官方 win_dividend − $10，唔中 −$10。</li>
-                <li>只買位置：同一批馬，但盈虧用 race_results.csv 嘅 placedividend。有派彩先當中；冇派彩就 −$10。唔會用獨贏賠率去估位置派彩。</li>
-                <li>獨贏 + 位置：上面兩筆 $10 一齊計，總本金 $20。</li>
-                <li>EV / ROI = 全部呢啲注嘅淨盈虧 ÷ 總本金。</li>
+                <li>馬會派彩係每 $10 一票嘅回本（含本金）。只買獨贏：中就 (win_dividend − 10)；唔中 −10。若每注 $10,000，就再 × 1,000。</li>
+                <li>只買位置：同一批馬，盈虧用官方 placedividend，同樣按 $10 一票再放大。有派彩先當中；冇派彩就當輸。唔會用獨贏賠率去估位置派彩。</li>
+                <li>獨贏 + 位置：兩張票，總本金 = 每注 × 2。</li>
+                <li>EV / ROI = 全部呢啲注嘅淨盈虧 ÷ 總投注額（唔係 ÷ 初始本金）。蒙地卡羅「相對本金 %」先係 ÷ 初始本金。</li>
               </ol>
             </details>
             <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -215,7 +215,7 @@
 
           <article class="kpi-card">
             <h2 class="text-sm font-semibold text-gold-300">蒙地卡羅盈虧與回撤預測</h2>
-            <p class="mt-1 text-xs text-slate-500">每年預計落注場次用<strong class="text-gold-300">策略頻率 × 一年賽馬日</strong>自動計（馬會一年大約 80–90 日，預設 88）。模擬下注次數係用歷史注隨機重抽幾多條「一年路徑」，用來估年化回報、MDD 同破產機會。</p>
+            <p class="mt-1 text-xs text-slate-500">每年預計落注場次用<strong class="text-gold-300">策略頻率 × 一年賽馬日</strong>自動計。策略回測以馬會官方每 <strong class="text-gold-300">$10</strong> 一注計盈虧；蒙地卡羅會把每注歷史盈虧 ×（每注金額 ÷ $10）。所以本金 $1,000萬／每注 $10,000，金額回報應大約係 $1萬／$10 嘅 1,000 倍；相對本金嘅百分比喺兩者一齊放大時應大致不變。模擬下注次數係隨機重抽幾多條一年路徑。</p>
             <div class="mt-4 grid gap-3 md:grid-cols-4">
               <label class="text-xs text-slate-400">初始本金<input id="mc-bankroll" type="number" class="field mt-1" value="10000" /></label>
               <label class="text-xs text-slate-400">每注金額<input id="mc-stake" type="number" class="field mt-1" value="10" /></label>
@@ -677,8 +677,8 @@ scraper_runner.py auto
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <script src="./assets/core.js?v=20261116g"></script>
-  <script src="./assets/engine.js?v=20261116g"></script>
-  <script src="./assets/app.js?v=20261116g"></script>
+  <script src="./assets/core.js?v=20261116h"></script>
+  <script src="./assets/engine.js?v=20261116h"></script>
+  <script src="./assets/app.js?v=20261116h"></script>
 </body>
 </html>

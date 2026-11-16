@@ -2,11 +2,20 @@
 (function (global) {
   const { num, isTrue } = global.HKJC;
 
-  function placeOk(rank, field) {
-    if (rank <= 0) return false;
-    if (field <= 3) return rank === 1;
-    if (field <= 6) return rank <= 2;
-    return rank <= 3;
+  const HKJC_TICKET_UNIT = 10;
+
+  function ticketPnl(dividend, stake, unit) {
+    const u = num(unit, HKJC_TICKET_UNIT);
+    const s = num(stake, u);
+    const d = num(dividend, 0);
+    if (!(u > 0) || !Number.isFinite(s) || s === 0) return 0;
+    return d > 0 ? d * (s / u) - s : -s;
+  }
+
+  function payoutOddsFromDividend(dividend, unit) {
+    const u = num(unit, HKJC_TICKET_UNIT);
+    const d = num(dividend, 0);
+    return d > 0 && u > 0 ? d / u : 0;
   }
 
   function normalizeCheckpoint(value) {
@@ -39,12 +48,9 @@
     const checkpoint = opts.checkpoint || "T-1";
     const stake = num(opts.stake, 10);
     const resultMap = new Map();
-    const field = new Map();
     for (const r of results) {
       const key = `${r.race_date}|${r.venue}|${r.race_no}|${r.horse_no}`;
       resultMap.set(key, r);
-      const fk = `${r.race_date}|${r.venue}|${r.race_no}`;
-      field.set(fk, (field.get(fk) || 0) + 1);
     }
     const trades = [];
     for (const t of triggers(odds, minOdds, maxOdds, threshold, checkpoint)) {
@@ -54,23 +60,21 @@
       const rank = num(res.finish_rank, 0);
       const winDiv = num(res.win_dividend, 0);
       const plaDiv = num(res.placedividend, 0);
-      const fsize = field.get(`${t.race_date}|${t.venue}|${t.race_no}`) || 14;
       let pnl = 0;
       let hit = false;
-      let payoutOdds = 0;
+      let payOdds = 0;
       if (betType === "win" || betType === "win_place") {
-        pnl += winDiv > 0 ? winDiv - stake : -stake;
+        pnl += ticketPnl(winDiv, stake, HKJC_TICKET_UNIT);
         if (winDiv > 0) {
           hit = true;
-          payoutOdds = winDiv / stake;
+          payOdds = payoutOddsFromDividend(winDiv, HKJC_TICKET_UNIT);
         }
       }
       if (betType === "place" || betType === "win_place") {
-        const got = plaDiv > 0 ? plaDiv : placeOk(rank, fsize) ? 0 : 0;
-        pnl += got > 0 ? got - stake : -stake;
-        if (got > 0) {
+        pnl += ticketPnl(plaDiv, stake, HKJC_TICKET_UNIT);
+        if (plaDiv > 0) {
           hit = true;
-          payoutOdds = Math.max(payoutOdds, got / stake);
+          payOdds = Math.max(payOdds, payoutOddsFromDividend(plaDiv, HKJC_TICKET_UNIT));
         }
       }
       trades.push({
@@ -80,8 +84,9 @@
         placedividend: plaDiv,
         pnl: Math.round(pnl * 100) / 100,
         hit,
-        payout_odds: payoutOdds,
+        payout_odds: payOdds,
         stakes: stake * (betType === "win_place" ? 2 : 1),
+        unit_stake: HKJC_TICKET_UNIT,
       });
     }
     const n = trades.length;
@@ -134,10 +139,15 @@
   }
 
   function monteCarlo(trades, opts) {
-    const pnls = trades.map((t) => t.pnl);
-    if (!pnls.length) return null;
+    if (!trades || !trades.length) return null;
     const bank0 = num(opts.bankroll, 10000);
-    const stake = num(opts.stake, 10);
+    const unit = num(opts.unitStake, HKJC_TICKET_UNIT);
+    const stake = num(opts.stake, unit);
+    const scale = unit > 0 ? stake / unit : 1;
+    const pnls = trades.map((t) => num(t.pnl, 0) * scale);
+    if (!pnls.length) return null;
+    const legs = Math.max(1, Math.round(num(trades[0].stakes, unit) / unit));
+    const ticketCost = stake * legs;
     const races = Math.max(1, Math.floor(num(opts.races, 400)));
     const sims = Math.max(1, Math.floor(num(opts.sims, 1000)));
     const points = Math.min(80, races);
@@ -157,7 +167,7 @@
           if (eq > peak) peak = eq;
           const dd = peak > 0 ? (peak - eq) / peak : 0;
           if (dd > mdd) mdd = dd;
-          if (eq < stake) ruined = true;
+          if (eq < ticketCost) ruined = true;
         }
         if (i % step === 0) buckets[i / step].push(eq);
       }
@@ -185,6 +195,9 @@
       expected_roi: bank0 ? (expectedPnl / bank0) * 100 : 0,
       expected_final: expectedFinal,
       bankroll: bank0,
+      stake,
+      scale,
+      ticket_cost: ticketCost,
       mdd_median: percentile(mdds, 50),
       mdd_p95: percentile(mdds, 95),
       ruin: (ruin / sims) * 100,
@@ -268,5 +281,15 @@
     return wide;
   }
 
-  global.HKJCEngine = { evaluate, monteCarlo, triggers, pivotOdds, raceDayCount, yearlyBets };
+  global.HKJCEngine = {
+    evaluate,
+    monteCarlo,
+    triggers,
+    pivotOdds,
+    raceDayCount,
+    yearlyBets,
+    ticketPnl,
+    payoutOddsFromDividend,
+    HKJC_TICKET_UNIT,
+  };
 })(window);
