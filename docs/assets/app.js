@@ -399,6 +399,14 @@
     $("page-indicator").textContent = `${state.page} / ${pages}`;
   }
 
+  function fmtSignedMoney(n) {
+    const v = Math.round(Number(n) || 0);
+    const abs = Math.abs(v).toLocaleString("en-US");
+    if (v > 0) return "+$" + abs;
+    if (v < 0) return "-$" + abs;
+    return "$0";
+  }
+
   function kpi(id, label, value, sub, tone) {
     const toneClass =
       tone === "up" ? "text-emerald-300" : tone === "down" ? "text-rose-300" : "text-gold-300";
@@ -478,23 +486,26 @@
         `每年預計落注場次：<span class="font-mono text-gold-300">${races}</span> 注` +
         `　（頻率 ${freq.toFixed(1)} 注／賽馬日 × ${days} 個賽馬日）`;
     }
+    const mcStake = num($("mc-stake").value, 10);
     const mc = monteCarlo(bt.trades, {
       bankroll: num($("mc-bankroll").value, 10000),
-      stake: num($("mc-stake").value, 10),
+      stake: mcStake,
+      unitStake: 10,
       races: Math.max(1, races),
       sims: num($("mc-sims").value, 1000),
     });
     state.mc = mc;
     const pnl = Math.round(mc.expected_pnl);
     const pct = Number(mc.expected_roi || 0);
-    const dollar = (pnl >= 0 ? "+" : "") + "$" + pnl;
+    const dollar = fmtSignedMoney(mc.expected_pnl);
     const pctTxt = (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%";
+    const scale = Number(mc.scale || mcStake / 10);
     $("mc-kpis").innerHTML = [
       kpi(
         "e",
         "預期年化回報",
         `${dollar}  ·  ${pctTxt}`,
-        `期末資金 $${Math.round(mc.expected_final)} · ${mc.races} 注／年`,
+        `金額按每注 $${Math.round(mcStake).toLocaleString("en-US")}（${scale.toLocaleString("en-US")} 張 $10 票）放大；% 相對本金。期末 $${Math.round(mc.expected_final).toLocaleString("en-US")} · ${mc.races} 注／年`,
         pnl >= 0 ? "up" : "down"
       ),
       kpi("d", "最大回撤 MDD", (mc.mdd_median * 100).toFixed(1) + "%", `P95 ${(mc.mdd_p95 * 100).toFixed(1)}%`, "down"),

@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.backtest import evaluate, race_day_count, yearly_bets
+from src.backtest import evaluate, payout_odds, race_day_count, scale_unit_pnl, ticket_pnl, yearly_bets
 from src.csv_store import load_odds, load_results
 from src.hkjc_client import HKJCClient, Meeting
 from src.monitor import plan_auto, restore_monitor_state, should_handoff
@@ -235,6 +235,10 @@ def test_place_and_win_place_use_official_dividends_not_win_odds():
     both = evaluate(odds, results, bet_type="win_place", checkpoint="T-1", threshold=50)
     assert both["staked"] == 20
     assert both["pnl"] == 2.0  # -10 win + 12 place
+    big_place = evaluate(odds, results, bet_type="place", checkpoint="T-1", threshold=50, stake=10000)
+    assert big_place["pnl"] == 12000
+    assert big_place["roi"] == place["roi"]
+    assert big_place["avg_payout_odds"] == place["avg_payout_odds"] == 2.2
 
 
 def test_winplaodds_string_keeps_pools_apart():
@@ -316,6 +320,78 @@ def test_plan_auto_uses_actual_post_times():
         max_wait_minutes=45,
     )
     assert hv_near.action == "monitor"
+
+
+def test_ticket_pnl_scales_hkjc_ten_dollar_unit():
+    assert ticket_pnl(60, 10) == 50
+    assert ticket_pnl(60, 10000) == 50000
+    assert ticket_pnl(0, 10) == -10
+    assert ticket_pnl(0, 10000) == -10000
+    assert payout_odds(60) == 6.0
+    assert payout_odds(22) == 2.2
+    assert scale_unit_pnl(-10, 10000) == -10000
+    assert scale_unit_pnl(42, 10000) == 42000
+    small = evaluate(
+        [
+            {
+                "race_date": "2026-11-15",
+                "venue": "ST",
+                "race_no": "1",
+                "checkpoint": "T-1",
+                "horse_no": "3",
+                "win_odds": 6.0,
+                "win_drop_pct": 55,
+                "is_brown_grid": "true",
+            }
+        ],
+        [
+            {
+                "race_date": "2026-11-15",
+                "venue": "ST",
+                "race_no": "1",
+                "horse_no": "3",
+                "finish_rank": 1,
+                "win_dividend": 60,
+                "placedividend": 20,
+            }
+        ],
+        bet_type="win",
+        checkpoint="T-1",
+        threshold=50,
+        stake=10,
+    )
+    big = evaluate(
+        [
+            {
+                "race_date": "2026-11-15",
+                "venue": "ST",
+                "race_no": "1",
+                "checkpoint": "T-1",
+                "horse_no": "3",
+                "win_odds": 6.0,
+                "win_drop_pct": 55,
+                "is_brown_grid": "true",
+            }
+        ],
+        [
+            {
+                "race_date": "2026-11-15",
+                "venue": "ST",
+                "race_no": "1",
+                "horse_no": "3",
+                "finish_rank": 1,
+                "win_dividend": 60,
+                "placedividend": 20,
+            }
+        ],
+        bet_type="win",
+        checkpoint="T-1",
+        threshold=50,
+        stake=10000,
+    )
+    assert small["pnl"] == 50
+    assert big["pnl"] == 50000
+    assert big["roi"] == small["roi"] == 500.0
 
 
 def test_yearly_bets_is_frequency_times_race_days():
@@ -438,6 +514,7 @@ if __name__ == "__main__":
     test_win_and_place_boards_are_separate()
     test_t1_strategy_ignores_other_checkpoints()
     test_place_and_win_place_use_official_dividends_not_win_odds()
+    test_ticket_pnl_scales_hkjc_ten_dollar_unit()
     test_winplaodds_string_keeps_pools_apart()
     test_telegram_uses_own_checkpoint_odds_and_bet_label()
     test_plan_auto_uses_actual_post_times()
