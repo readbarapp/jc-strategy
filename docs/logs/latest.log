@@ -2,3 +2,6 @@
 2026-11-16 12:00:00 HKT [INFO] 示範歷史數據已載入 data/odds_snapshots.csv 與 data/race_results.csv
 2026-11-16 12:00:00 HKT [INFO] 透過 GitHub Pages「系統狀態」分頁可觸發 hkjc_monitor.yml
 2026-11-16 12:00:00 HKT [INFO] 今日若為香港賽馬日，Actions 會以 10 秒間隔捕捉 T-15 … T-0 賠率走勢
+2026-11-16 14:16:09 HKT [INFO] scraper_runner command=results date=2026-11-16 tz=Asia/Hong_Kong
+2026-11-16 14:16:11 HKT [INFO] No Hong Kong race meeting on 2026-11-16
+2026-11-16 14:16:11 HKT [INFO] No meeting for results harvest
