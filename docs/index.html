@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/app.css?v=20261116c" />
+  <link rel="stylesheet" href="./assets/app.css?v=20261116d" />
 </head>
 <body class="min-h-screen text-slate-100 rail">
   <div class="flex min-h-screen">
@@ -69,7 +69,7 @@
           <article class="kpi-card">
             <h2 class="text-sm font-semibold text-gold-300">點樣收錄數據（用日常說話講）</h2>
             <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-slate-300">
-              <li>每日香港時間大約中午同傍晚，系統會自動問：「今日沙田或者跑馬地有冇賽馬？」冇就收工，有就開始睇錶。</li>
+              <li>系統全日每隔大約半個鐘問馬會：「今日沙田或者跑馬地有冇賽馬？第一場幾點開跑？」冇就收工。有就跟<strong class="text-gold-300">當日官方第一場開跑時間</strong>倒數，唔係寫死 11:00／17:30。</li>
               <li>開跑前 15、10、5、1 分鐘同開跑嗰下，分別向馬會問<strong class="text-gold-300">兩個獨立彩池</strong>：獨贏（WIN）同位置（PLA）。兩個數字分開寫入兩欄，唔會撈亂。唔再抄開賽前 3 分鐘。</li>
               <li>獨贏啡格：呢個鐘點嘅<strong class="text-gold-300">獨贏</strong>比起<strong class="text-gold-300">上一個鐘點（大約 5 分鐘前）</strong>平咗一半或以上。例如開賽前 1 分鐘同開賽前 5 分鐘比。位置表用同樣方法睇位置急跌，但策略／通知預設仍然用獨贏啡格做訊號。</li>
               <li>賽事完咗再抄官方名次、獨贏派彩、位置派彩（每 $10）。回測「只買位置」用嘅係呢個官方位置派彩，唔係開賽前位置賠率去估。</li>
@@ -156,7 +156,7 @@
         <section data-panel="strategy" class="hidden space-y-6">
           <article class="kpi-card">
             <h2 class="text-sm font-semibold text-gold-300">策略參數</h2>
-            <p class="mt-2 text-sm leading-relaxed text-slate-300">揀馬用<strong class="text-gold-300">獨贏啡格</strong>＋嗰一刻<strong class="text-gold-300">獨贏賠率範圍</strong>（預設開賽前 1 分鐘）。開賽前 1 分鐘嘅啡格係同<strong class="text-gold-300">開賽前 5 分鐘</strong>比，唔再同 3 分鐘比。之後先決定點買：$10 獨贏、 $10 位置、定兩者都買。獨贏盈虧用官方<strong class="text-gold-300">獨贏派彩</strong>；位置盈虧用官方<strong class="text-gold-300">位置派彩</strong>（每 $10）。</p>
+            <p class="mt-2 text-sm leading-relaxed text-slate-300">揀馬用<strong class="text-gold-300">獨贏啡格</strong>＋嗰一刻<strong class="text-gold-300">獨贏賠率範圍</strong>（預設開賽前 1 分鐘）。開賽前 1 分鐘嘅啡格係同<strong class="text-gold-300">開賽前 5 分鐘</strong>比，唔再同 3 分鐘比。之後先決定點買：$10 獨贏、 $10 位置、定兩者都買。獨贏盈虧用官方<strong class="text-gold-300">獨贏派彩</strong>；位置盈虧用官方<strong class="text-gold-300">位置派彩</strong>（每 $10）。<strong class="text-gold-300">策略頻率</strong>＝總觸發次數 ÷ 賠率樣本入面有幾多個賽馬日（冇觸發嘅賽日都計），大約一個賽馬日有幾多次投注機會。</p>
             <details class="mt-3 text-xs leading-relaxed text-slate-400">
               <summary class="cursor-pointer text-gold-300">EV 點計（即使畫面主要見到獨贏）</summary>
               <ol class="mt-2 list-decimal space-y-1 pl-5">
@@ -196,7 +196,7 @@
               </label>
             </div>
           </article>
-          <div id="bt-kpis" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"></div>
+          <div id="bt-kpis" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"></div>
           <article class="overflow-hidden rounded-2xl border border-white/10">
             <div class="border-b border-white/10 px-4 py-3 text-sm text-slate-400">最近觸發注（以當前參數即時重算）</div>
             <div class="max-h-[320px] overflow-auto">
@@ -289,8 +289,18 @@
           <p class="text-xs text-slate-500"><span id="gh-run">尚未查詢 workflow run</span> <a id="gh-run-link" class="hidden text-gold-400 underline" target="_blank" rel="noreferrer">開啟 run</a></p>
 
           <article class="kpi-card">
+            <h2 class="text-sm font-semibold text-gold-300">會唔會自己喺賽馬日跑？</h2>
+            <p class="mt-2 text-sm leading-relaxed text-slate-300">會。真正自動跑嘅係 <strong class="text-gold-300">GitHub Actions</strong>，唔係你貼嘅 PAT，亦唔使開住呢個網站或者部電腦。</p>
+            <ul class="mt-3 list-disc space-y-1 pl-5 text-sm leading-relaxed text-slate-400">
+              <li>排程全日每隔大約半個鐘問馬會今日有冇賽、第一場官方開跑時間幾點；到監控窗（第一場前約 20 分鐘）先開始抄數。</li>
+              <li><strong class="text-slate-200">PAT</strong> 只係你喺呢個網站改 <span class="mono">config.json</span>、人手撳「觸發今日監控」先用到。入咗 PAT 唔等於替你排程。</li>
+              <li>Telegram 推播另外要 repo Secret <span class="mono">TELEGRAM_BOT_TOKEN</span>；Actions 寫入權限要設成 Read and write。</li>
+            </ul>
+          </article>
+
+          <article class="kpi-card">
             <h2 class="text-sm font-semibold text-gold-300">網頁端授權（寫入 config.json / 觸發 Action）</h2>
-            <p class="mt-1 text-xs text-slate-500">建立 classic PAT，勾選 <span class="mono">repo</span> 與 workflow。Token 只存在 localStorage。</p>
+            <p class="mt-1 text-xs text-slate-500">PAT 唔負責賽日自動跑。建立 classic PAT，勾選 <span class="mono">repo</span> 與 workflow。Token 只存在 localStorage。</p>
             <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <label class="text-xs text-slate-400">Owner<input id="gh-owner" class="field mt-1" /></label>
               <label class="text-xs text-slate-400">Repo<input id="gh-repo" class="field mt-1" /></label>
@@ -324,7 +334,7 @@
 <hr />
 <h2>程式幫你做咩</h2>
 <ol>
-<li><strong>賽日自動問馬會</strong>：今日沙田定跑馬地有賽？冇就收工。</li>
+<li><strong>賽日自動問馬會</strong>：今日沙田定跑馬地有賽？第一場官方幾點開跑？冇就收工。</li>
 <li><strong>開跑前抄賠率</strong>：每場開賽前 15、10、5、1 分鐘同開跑嗰下，分開抄獨贏同位置。</li>
 <li><strong>啡格警報</strong>：預設喺開賽前 1 分鐘，如果獨贏比起開賽前 5 分鐘平咗一半或以上，而且賠率落喺你設定範圍，就 Telegram 通知你。</li>
 <li><strong>完場抄派彩</strong>：官方名次、獨贏派彩、位置派彩，之後用嚟回測賺蝕。</li>
@@ -356,7 +366,7 @@
 <li>Fine-grained：只授權呢個 repo，Contents 同 Actions 都要 Read and write</li>
 <li>貼到網站 <strong>即時狀態</strong> 頁，撳「僅儲存授權到瀏覽器」（只留喺你部機，唔入 git）</li>
 </ol>
-<p>公開 repo <strong>睇</strong> CSV 唔使 token；<strong>寫設定 / 觸發 Action</strong> 先要。</p>
+<p>公開 repo <strong>睇</strong> CSV 唔使 token；<strong>寫設定 / 觸發 Action</strong> 先要。入咗 PAT <strong>唔等於</strong> 替你排程；賽日自動跑係 GitHub Actions。</p>
 <h3>E. 設定策略同通知</h3>
 <ol>
 <li><strong>策略回測</strong>：揀投注方法、開賽前幾多分鐘（預設 1 分鐘）、獨贏賠率範圍（預設 3.5–9.0）。</li>
@@ -372,19 +382,19 @@
 <tr><td>確認今日真係有香港賽馬（沙田或跑馬地）</td><td>馬會賽程或網站狀態頁之後會顯示場地</td></tr>
 <tr><td>確認 Telegram 測試仍然得</td><td>隨便撳一次「發送測試訊息」</td></tr>
 <tr><td>睇下賠率範圍／時間點仲係咪你想要嘅</td><td>策略頁同 Telegram 頁</td></tr>
-<tr><td><strong>唔使</strong>提早撳監控</td><td>排程會自己喺 11:00 或 17:30 起動</td></tr>
+<tr><td><strong>唔使</strong>提早撳監控</td><td>排程會自己問馬會今日第一場幾點，到監控窗先抄數</td></tr>
 </tbody></table>
-<p>排程（已經寫死喺 workflow，香港時間）：</p>
+<p>排程（香港時間；<strong>唔再寫死</strong> 11:00／17:30）：</p>
 <table><thead><tr><th>時間</th><th>做咩</th></tr></thead><tbody>
-<tr><td><strong>11:00</strong></td><td>沙田日賽監控視窗（<code>auto</code>）</td></tr>
-<tr><td><strong>17:30</strong></td><td>跑馬地／夜賽監控視窗（<code>auto</code>）</td></tr>
+<tr><td><strong>09:00–00:30 每隔約 30 分鐘</strong></td><td>偵測今日有冇賽、讀官方第一場 <code>postTime</code>；到監控窗先開始 <code>auto</code></td></tr>
 <tr><td><strong>00:20</strong>（第二日零晨）</td><td>再收一次官方賽果，怕夜賽完得遲</td></tr>
 </tbody></table>
-<p><code>auto</code> 會自己問今日有冇賽。冇就幾分鐘內收工，唔會空轉 6 小時。</p>
+<p><code>auto</code> 會自己問今日有冇賽。冇就幾分鐘內收工。有賽但第一場仲好遠，亦會收工等下一格排程，唔會由朝空等到晚（Actions 最長 6 小時）。</p>
+<p>PAT 只係網站改設定／人手觸發用。賽日自動跑靠 GitHub Actions，你唔開網站都得。</p>
 <h3>開跑前（系統自動）</h3>
 <ol>
-<li>偵測到今日有 ST 或 HV。</li>
-<li>等到 <strong>第一場開跑前 20 分鐘</strong> 先進入高頻（預設每 10 秒問一次馬會）。</li>
+<li>偵測到今日有 ST 或 HV，並讀當日每一場官方開跑時間。</li>
+<li>等到 <strong>當日第一場開跑前 20 分鐘</strong> 先進入高頻（預設每 10 秒問一次馬會）。沙田遲開、跑馬地提早、臨時改鐘都跟馬會當日時間。</li>
 <li>每一場、每一隻馬，只喺呢幾個鐘點各寫一次：</li>
 </ol>
 <p>   - 開賽前 <strong>15</strong> 分鐘</p>
@@ -415,7 +425,7 @@
 <li>下載獨贏 CSV、位置 CSV、賽果 CSV 自己存檔</li>
 </ol>
 <h3>唔係賽馬日</h3>
-<p>乜都唔使做。11:00 / 17:30 個 job 會寫「今日香港無賽馬日」就結束。網站繼續顯示舊數據。</p>
+<p>乜都唔使做。偵測 job 會寫「今日香港無賽馬日」就結束。網站繼續顯示舊數據。</p>
 <hr />
 <h2>四個分頁點用</h2>
 <h3>數據中心</h3>
@@ -433,14 +443,14 @@
 <li>只買位置：官方位置派彩 − $10（唔會用獨贏去估位置）</li>
 <li>獨贏 + 位置：兩筆 $10</li>
 </ul>
-<p>EV／ROI = 歷史跟呢條規則落注嘅淨盈虧 ÷ 總本金。蒙地卡羅再用呢啲盈虧隨機重覆 1,000 次，估一年後賺幾多、回撤同破產機會。</p>
+<p>EV／ROI = 歷史跟呢條規則落注嘅淨盈虧 ÷ 總本金。<strong>策略頻率</strong> = 總觸發次數 ÷ 賠率樣本入面有幾多個賽馬日（冇觸發嘅賽日都計），即大約一個賽馬日有幾多次投注機會。蒙地卡羅再用呢啲盈虧隨機重覆 1,000 次，估一年後賺幾多、回撤同破產機會。</p>
 <h3>Telegram 控制</h3>
 <p>投注方法、開賽前幾多分鐘、獨贏範圍可以同策略唔同。訊息會同時顯示獨贏同位置數字。要收到正式賽日警報，GitHub Secret 一定要有 bot token。</p>
 <h3>即時狀態 · 日誌</h3>
-<p>Actions 係咪運行中、今日已監控邊幾場、最近同步時間、<code>logs/latest.log</code>。PAT 亦係呢頁貼。</p>
+<p>Actions 係咪運行中、今日已監控邊幾場、最近同步時間、<code>logs/latest.log</code>。PAT 亦係呢頁貼：只負責網站寫入同人手觸發，<strong>唔負責</strong>賽日自動排程。</p>
 <hr />
 <h2>人手補救（排程冇跑、中途斷網）</h2>
-<p>網站右上「<strong>觸發今日監控</strong>」= 跑 <code>auto</code>（同 11:00／17:30 同一個命令）。</p>
+<p>網站右上「<strong>觸發今日監控</strong>」= 人手跑 <code>auto</code>（同排程同一個命令；人手撳會即使第一場仍遠都開始等）。</p>
 <p>數據中心：</p>
 <ul>
 <li><strong>單次快照</strong>：而家即刻抄一輪所有場次（用嚟補漏，唔係完整時間序列）</li>
@@ -468,14 +478,15 @@
 <p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。</p>
 <hr />
 <h2>一、整體流程</h2>
-<pre><code>GitHub Actions（香港時間 11:00 / 17:30 / 00:20，或你人手觸發）
+<pre><code>GitHub Actions（香港時間 09:00–00:30 每隔約 30 分鐘偵測，或你人手觸發）
         │
         ▼
 scraper_runner.py auto
         │
-        ├─ 問：今日沙田或跑馬地有冇賽？
-        │     冇 → 嘗試收昨日／完場賽果 → 收工
-        │     有、未開跑 → 等到第一場前 20 分鐘
+        ├─ 問：今日沙田或跑馬地有冇賽？第一場官方 postTime 幾點？
+        │     冇 → 收工（零晨再試收昨夜賽果）
+        │     有、第一場仍遠（&gt;約 45 分鐘先到監控窗）→ 記低時間、收工等下一格
+        │     有、接近第一場前 20 分鐘 → 等到監控窗再高頻抄賠率
         │     有、賽日進行中 → 高頻抄賠率
         │     有、全部完咗 → 抄官方賽果
         │
@@ -658,8 +669,8 @@ scraper_runner.py auto
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <script src="./assets/core.js?v=20261116c"></script>
-  <script src="./assets/engine.js?v=20261116c"></script>
-  <script src="./assets/app.js?v=20261116c"></script>
+  <script src="./assets/core.js?v=20261116d"></script>
+  <script src="./assets/engine.js?v=20261116d"></script>
+  <script src="./assets/app.js?v=20261116d"></script>
 </body>
 </html>

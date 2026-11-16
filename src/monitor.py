@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 from . import csv_store, gitops, telegram_notify
@@ -10,8 +13,8 @@ from .config import brown_grid_threshold, load_config, scrape_interval
 from .hkjc_client import HKJCClient, Meeting
 from .logger import log, log_exception
 from .odds_math import DEFAULT_CHECKPOINTS, is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
-from .status import write_status
-from .timeutil import format_hk, minutes_until, now_hk, plus_minutes, today_hk
+from .status import load_status, write_status
+from .timeutil import format_hk, minutes_until, now_hk, plus_minutes, to_hk, today_hk
 
 
 def _bool_str(value: bool) -> str:
@@ -273,25 +276,148 @@ def run_results(cfg: dict[str, Any] | None = None, race_date: str | None = None)
     return "results"
 
 
+@dataclass(frozen=True)
+class AutoPlan:
+    """What a scheduled `auto` tick should do, given today's official post times."""
+
+    action: str
+    first_post: datetime | None = None
+    last_post: datetime | None = None
+    start_watch: datetime | None = None
+    end_watch: datetime | None = None
+    wait_minutes: float = 0.0
+
+
+def plan_auto(
+    now: datetime,
+    posts: list[datetime],
+    lead_minutes: int = 20,
+    trail_minutes: int = 25,
+    max_wait_minutes: int = 45,
+) -> AutoPlan:
+    """Decide from actual first/last postTime — never from a hardcoded ST/HV clock.
+
+    GitHub Actions jobs time out at 6 hours, so a tick that is still far from
+    first_watch must exit (`defer`) and let the next detector cron pick it up.
+    """
+    now = to_hk(now)
+    if not posts:
+        return AutoPlan(action="monitor")
+    first = min(posts)
+    last = max(posts)
+    start_watch = plus_minutes(first, -int(lead_minutes))
+    end_watch = plus_minutes(last, int(trail_minutes))
+    if now > end_watch:
+        return AutoPlan(
+            action="results",
+            first_post=first,
+            last_post=last,
+            start_watch=start_watch,
+            end_watch=end_watch,
+        )
+    if now >= start_watch:
+        return AutoPlan(
+            action="monitor",
+            first_post=first,
+            last_post=last,
+            start_watch=start_watch,
+            end_watch=end_watch,
+        )
+    wait_min = (start_watch - now).total_seconds() / 60.0
+    if wait_min <= max(0, int(max_wait_minutes)):
+        return AutoPlan(
+            action="monitor",
+            first_post=first,
+            last_post=last,
+            start_watch=start_watch,
+            end_watch=end_watch,
+            wait_minutes=wait_min,
+        )
+    return AutoPlan(
+        action="defer",
+        first_post=first,
+        last_post=last,
+        start_watch=start_watch,
+        end_watch=end_watch,
+        wait_minutes=wait_min,
+    )
+
+
+def _status_if_changed(*, commit_message: str, **kwargs: Any) -> None:
+    """Avoid a git commit every 30-minute idle poll when nothing meaningful changed."""
+    prev = load_status()
+    keys = ("state", "is_race_day", "venue", "race_date", "last_message")
+    if all(k not in kwargs or prev.get(k) == kwargs.get(k) for k in keys):
+        log("Status unchanged — skip commit")
+        return
+    write_status(**kwargs)
+    gitops.persist_and_push(commit_message)
+
+
+def _idle_no_meeting(race_date: str) -> str:
+    msg = "今日香港無賽馬日"
+    log(msg)
+    _status_if_changed(
+        state="idle",
+        is_race_day=False,
+        venue="",
+        race_date=race_date,
+        last_message=msg,
+        last_sync=format_hk(now_hk()),
+        commit_message="status: no HKJC meeting today",
+    )
+    return "idle"
+
+
 def run_auto(cfg: dict[str, Any] | None = None, race_date: str | None = None) -> str:
     cfg = cfg or load_config()
     client = HKJCClient()
+    now = now_hk()
     meeting = client.detect_today_meeting(race_date or today_hk())
     if not meeting:
-        # still try yesterday results in case night racing closed after midnight UTC
-        return run_results(cfg, race_date)
-    posts = [client.scheduled_datetime(meeting, r) for r in meeting.races]
-    posts = [p for p in posts if p]
-    now = now_hk()
+        # Night meetings can finish after midnight HKT; the 00:20 harvest uses this path.
+        if now.hour == 0 and not race_date:
+            yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+            log(f"No meeting on {today_hk()} — trying results for {yesterday}")
+            return run_results(cfg, yesterday)
+        return _idle_no_meeting(race_date or today_hk())
+
+    posts = [p for p in (client.scheduled_datetime(meeting, r) for r in meeting.races) if p]
     lead = int(cfg["data"].get("monitor_lead_minutes", 20))
     trail = int(cfg["data"].get("monitor_trail_minutes", 25))
-    if posts:
-        start_watch = plus_minutes(min(posts), -lead)
-        end_watch = plus_minutes(max(posts), trail)
-        if start_watch <= now <= end_watch:
-            return run_monitor(cfg, meeting.race_date)
-        if now > end_watch:
-            return run_results(cfg, meeting.race_date)
-        log(f"Race day {meeting.race_date} {meeting.venue} starts {format_hk(min(posts))} — waiting in monitor")
+    max_wait = int(cfg["data"].get("max_wait_before_monitor_minutes", 45))
+    plan = plan_auto(now, posts, lead, trail, max_wait)
+    forced = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+
+    if plan.action == "defer" and forced:
+        log("手動觸發：即使第一場仍遠，亦進入監控等待")
         return run_monitor(cfg, meeting.race_date)
+
+    if plan.action == "defer":
+        first_txt = format_hk(plan.first_post, with_seconds=False) if plan.first_post else "?"
+        watch_txt = format_hk(plan.start_watch, with_seconds=False) if plan.start_watch else "?"
+        msg = (
+            f"偵測到 {meeting.venue} 賽馬日，第一場 {first_txt}，"
+            f"監控窗 {watch_txt} 開始；距離仍有 {plan.wait_minutes:.0f} 分鐘，稍後排程再啟動"
+        )
+        log(msg)
+        _status_if_changed(
+            state="idle",
+            is_race_day=True,
+            venue=meeting.venue,
+            race_date=meeting.race_date,
+            last_message=msg,
+            last_sync=format_hk(now),
+            commit_message="status: race day detected, waiting for first post time",
+        )
+        return "defer"
+
+    if plan.action == "results":
+        return run_results(cfg, meeting.race_date)
+
+    if plan.first_post:
+        log(
+            f"Race day {meeting.race_date} {meeting.venue} first post "
+            f"{format_hk(plan.first_post, with_seconds=False)} — start monitor"
+        )
     return run_monitor(cfg, meeting.race_date)

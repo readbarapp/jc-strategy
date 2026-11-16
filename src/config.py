@@ -22,6 +22,7 @@ DEFAULTS: dict[str, Any] = {
         "venues": ["ST", "HV"],
         "monitor_lead_minutes": 20,
         "monitor_trail_minutes": 25,
+        "max_wait_before_monitor_minutes": 45,
     },
     "strategy": {
         "min_odds": 3.5,

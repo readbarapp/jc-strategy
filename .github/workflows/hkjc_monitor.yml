@@ -2,11 +2,11 @@ name: HKJC Monitor
 
 on:
   schedule:
-    # 11:00 HKT — Sha Tin afternoon meetings
-    - cron: "0 3 * * *"
-    # 17:30 HKT — Happy Valley / night meetings
-    - cron: "30 9 * * *"
-    # 00:20 HKT — harvest official results after the last race
+    # Detector: every 30 minutes during hours when a HK meeting can still be live.
+    # 09:00–00:30 HKT = 01:00–16:30 UTC. Each tick asks HKJC for today's meeting
+    # and that day's official first postTime — not a hardcoded 11:00 / 17:30.
+    - cron: "0,30 1-16 * * *"
+    # Extra results harvest 00:20 HKT in case night racing finished after the monitor job.
     - cron: "20 16 * * *"
   workflow_dispatch:
     inputs:

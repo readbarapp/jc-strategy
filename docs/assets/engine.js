@@ -92,6 +92,7 @@
       hits > 0
         ? trades.filter((t) => t.hit).reduce((s, t) => s + t.payout_odds, 0) / hits
         : 0;
+    const raceDays = raceDayCount(odds);
     return {
       triggers: n,
       hits,
@@ -100,8 +101,19 @@
       staked,
       pnl,
       roi: staked ? (pnl / staked) * 100 : 0,
+      race_days: raceDays,
+      triggers_per_race_day: raceDays ? n / raceDays : 0,
       trades,
     };
+  }
+
+  function raceDayCount(rows) {
+    const seen = new Set();
+    for (const row of rows || []) {
+      if (!row.race_date) continue;
+      seen.add(`${row.race_date}|${row.venue || ""}`);
+    }
+    return seen.size;
   }
 
   function percentile(sorted, p) {
@@ -245,5 +257,5 @@
     return wide;
   }
 
-  global.HKJCEngine = { evaluate, monteCarlo, triggers, pivotOdds };
+  global.HKJCEngine = { evaluate, monteCarlo, triggers, pivotOdds, raceDayCount };
 })(window);
