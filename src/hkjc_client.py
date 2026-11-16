@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import random
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -414,23 +416,72 @@ class Meeting:
 
 
 class HKJCClient:
+    BLOCKED_STATUS = {403, 408, 429, 500, 502, 503, 504}
+
     def __init__(self, timeout: int = 20) -> None:
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
+        self.backoff_until = 0.0
+        self.consecutive_blocks = 0
+
+    def recommended_sleep(self, base_seconds: int) -> int:
+        """Stretch the poll interval after 429/403 so we do not keep hammering HKJC."""
+        extra = min(90, 15 * self.consecutive_blocks) if self.consecutive_blocks else 0
+        wait = max(0.0, self.backoff_until - time.time())
+        return int(max(base_seconds, wait, extra))
+
+    def _request(self, method: str, url: str, **kwargs) -> requests.Response | None:
+        retries = 5
+        delay = 8.0
+        last_exc: Exception | None = None
+        for attempt in range(1, retries + 1):
+            try:
+                response = self.session.request(method, url, timeout=self.timeout, **kwargs)
+                if response.status_code in self.BLOCKED_STATUS:
+                    retry_after = response.headers.get("Retry-After", "")
+                    wait = float(retry_after) if str(retry_after).isdigit() else delay
+                    wait = min(120.0, max(5.0, wait))
+                    wait *= 0.85 + random.random() * 0.3
+                    self.consecutive_blocks += 1
+                    self.backoff_until = time.time() + wait
+                    log(
+                        f"HKJC HTTP {response.status_code} — backoff {wait:.0f}s "
+                        f"(attempt {attempt}/{retries})",
+                        level="WARN",
+                    )
+                    time.sleep(wait)
+                    delay = min(120.0, delay * 2)
+                    last_exc = RuntimeError(f"HTTP {response.status_code}")
+                    continue
+                response.raise_for_status()
+                self.consecutive_blocks = 0
+                return response
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_exc = exc
+                wait = min(120.0, delay)
+                self.consecutive_blocks += 1
+                self.backoff_until = time.time() + wait
+                log(f"HKJC network {type(exc).__name__} — backoff {wait:.0f}s", level="WARN")
+                time.sleep(wait)
+                delay = min(120.0, delay * 2)
+        if last_exc:
+            log_exception("HKJC request exhausted retries", last_exc)
+        return None
 
     def _graphql(self, query: str, variables: dict | None = None) -> dict[str, Any] | None:
+        response = self._request(
+            "POST",
+            GRAPHQL_URL,
+            json={"query": query, "variables": variables or {}},
+            headers={"Content-Type": "application/json", **HEADERS},
+        )
+        if response is None:
+            return None
         try:
-            response = self.session.post(
-                GRAPHQL_URL,
-                json={"query": query, "variables": variables or {}},
-                timeout=self.timeout,
-                headers={"Content-Type": "application/json", **HEADERS},
-            )
-            response.raise_for_status()
             payload = response.json()
         except Exception as exc:
-            log_exception("GraphQL request failed", exc)
+            log_exception("GraphQL JSON decode failed", exc)
             return None
         if payload.get("errors"):
             log(f"GraphQL errors: {payload['errors'][:2]}", level="WARN")
@@ -451,11 +502,10 @@ class HKJCClient:
         return self._fixture_meetings()
 
     def _fixture_meetings(self) -> list[tuple[str, str]]:
-        try:
-            html = self.session.get(FIXTURE_URL, timeout=self.timeout).text
-        except Exception as exc:
-            log_exception("Fixture page failed", exc)
+        response = self._request("GET", FIXTURE_URL)
+        if response is None:
             return []
+        html = response.text
         soup = BeautifulSoup(html, "html.parser")
         found: list[tuple[str, str]] = []
         for link in soup.find_all("a", href=True):
@@ -531,11 +581,10 @@ class HKJCClient:
             "Racecourse": venue,
             "RaceNo": "1",
         }
-        try:
-            html = self.session.get(RESULTS_URL, params=params, timeout=self.timeout).text
-        except Exception as exc:
-            log_exception("Results page meeting lookup failed", exc)
+        response = self._request("GET", RESULTS_URL, params=params)
+        if response is None:
             return None
+        html = response.text
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text(" ", strip=True)
         if venue == "ST" and "Sha Tin" not in text and "沙田" not in text:
@@ -629,12 +678,13 @@ class HKJCClient:
             "start": race_no,
             "end": race_no,
         }
+        response = self._request("GET", JSON_ODDS_URL, params=params)
+        if response is None:
+            return []
         try:
-            response = self.session.get(JSON_ODDS_URL, params=params, timeout=self.timeout)
-            response.raise_for_status()
             payload = response.json()
         except Exception as exc:
-            log_exception("getJSON winplaodds failed", exc)
+            log_exception("getJSON winplaodds JSON decode failed", exc)
             return []
         raw = payload.get("OUT") if isinstance(payload, dict) else str(payload)
         if not raw or "WIN" not in str(raw):
@@ -735,11 +785,10 @@ class HKJCClient:
             "Racecourse": meeting.venue,
             "RaceNo": str(race_no),
         }
-        try:
-            html = self.session.get(RESULTS_URL, params=params, timeout=self.timeout).text
-        except Exception as exc:
-            log_exception("LocalResults fetch failed", exc)
+        response = self._request("GET", RESULTS_URL, params=params)
+        if response is None:
             return []
+        html = response.text
         soup = BeautifulSoup(html, "html.parser")
         performance = self._find_table(soup, ["名次", "馬號", "馬名"])
         if performance is None:

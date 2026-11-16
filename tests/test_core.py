@@ -8,8 +8,8 @@ sys.path.insert(0, str(ROOT))
 
 from src.backtest import evaluate, race_day_count, yearly_bets
 from src.csv_store import load_odds, load_results
-from src.hkjc_client import HKJCClient
-from src.monitor import plan_auto
+from src.hkjc_client import HKJCClient, Meeting
+from src.monitor import plan_auto, restore_monitor_state, should_handoff
 from src.odds_board import pivot_odds
 from src.odds_math import is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
 from src.telegram_notify import format_alert, should_alert
@@ -331,6 +331,103 @@ def test_yearly_bets_is_frequency_times_race_days():
     assert yearly_bets(stats["triggers_per_race_day"], 88) == expected
 
 
+def test_first_live_upsert_drops_demo_rows():
+    import shutil
+    import tempfile
+
+    import src.csv_store as cs
+    from src.schema import ODDS_FIELDS
+
+    original = {
+        "DATA_DIR": cs.DATA_DIR,
+        "DOCS_DATA": cs.DOCS_DATA,
+        "ODDS_PATH": cs.ODDS_PATH,
+        "RESULTS_PATH": cs.RESULTS_PATH,
+        "BOARD_PATH": cs.BOARD_PATH,
+        "WIN_BOARD_PATH": cs.WIN_BOARD_PATH,
+        "PLACE_BOARD_PATH": cs.PLACE_BOARD_PATH,
+        "ORIGIN_PATH": cs.ORIGIN_PATH,
+        "DOCS_ORIGIN_PATH": cs.DOCS_ORIGIN_PATH,
+    }
+    root = Path(tempfile.mkdtemp())
+    try:
+        cs.DATA_DIR = root
+        cs.DOCS_DATA = root / "docs"
+        cs.ODDS_PATH = root / "odds_snapshots.csv"
+        cs.RESULTS_PATH = root / "race_results.csv"
+        cs.BOARD_PATH = root / "odds_board.csv"
+        cs.WIN_BOARD_PATH = root / "win_board.csv"
+        cs.PLACE_BOARD_PATH = root / "place_board.csv"
+        cs.ORIGIN_PATH = root / "dataset_origin.json"
+        cs.DOCS_ORIGIN_PATH = root / "docs" / "dataset_origin.json"
+        cs.write_rows(
+            cs.ODDS_PATH,
+            ODDS_FIELDS,
+            [
+                {
+                    "race_date": "2026-10-15",
+                    "venue": "HV",
+                    "race_no": "1",
+                    "scheduled_time": "19:15:00",
+                    "checkpoint": "T-1",
+                    "capture_timestamp": "2026-10-15 19:14:00",
+                    "horse_no": "1",
+                    "horse_name": "示範馬",
+                    "win_odds": "4.0",
+                    "place_odds": "1.7",
+                    "prev_win_odds": "8.0",
+                    "win_drop_pct": "50.0",
+                    "is_brown_grid": "true",
+                }
+            ],
+        )
+        cs.set_dataset_origin("demo", "test")
+        assert cs.dataset_origin() == "demo"
+        cs.upsert_odds(
+            [
+                {
+                    "race_date": "2026-11-18",
+                    "venue": "HV",
+                    "race_no": "3",
+                    "scheduled_time": "19:45:00",
+                    "checkpoint": "T-1",
+                    "capture_timestamp": "2026-11-18 19:44:00",
+                    "horse_no": "7",
+                    "horse_name": "金程千里",
+                    "win_odds": "5.2",
+                    "place_odds": "2.0",
+                    "prev_win_odds": "11.0",
+                    "win_drop_pct": "52.7",
+                    "is_brown_grid": "true",
+                }
+            ]
+        )
+        rows = cs.load_odds()
+        assert len(rows) == 1
+        assert rows[0]["race_date"] == "2026-11-18"
+        assert rows[0]["horse_name"] == "金程千里"
+        assert cs.dataset_origin() == "live"
+    finally:
+        for key, value in original.items():
+            setattr(cs, key, value)
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_restore_monitor_state_and_handoff_budget():
+    meeting = Meeting(race_date="2026-11-15", venue="ST")
+    odds_map, captured, alerted = restore_monitor_state(meeting)
+    assert captured
+    assert any(ck == "T-1" for _, _, ck in captured)
+    assert odds_map
+    assert alerted == set()
+    assert should_handoff(100, 19800) is False
+    assert should_handoff(19800, 19800) is True
+    client = HKJCClient()
+    assert client.recommended_sleep(10) == 10
+    client.consecutive_blocks = 2
+    assert client.recommended_sleep(10) == 30
+
+
 if __name__ == "__main__":
     test_timezone_is_hong_kong()
     test_drop_and_brown_grid()
@@ -345,4 +442,6 @@ if __name__ == "__main__":
     test_telegram_uses_own_checkpoint_odds_and_bet_label()
     test_plan_auto_uses_actual_post_times()
     test_yearly_bets_is_frequency_times_race_days()
+    test_first_live_upsert_drops_demo_rows()
+    test_restore_monitor_state_and_handoff_budget()
     print("all tests ok")

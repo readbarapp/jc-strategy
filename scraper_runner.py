@@ -22,7 +22,7 @@ if str(ROOT) not in sys.path:
 
 from src.config import load_config  # noqa: E402
 from src.logger import log, log_exception  # noqa: E402
-from src.monitor import run_auto, run_monitor, run_once, run_results  # noqa: E402
+from src.monitor import mark_job_start, run_auto, run_monitor, run_once, run_results  # noqa: E402
 from src.status import write_status  # noqa: E402
 from src.telegram_notify import send_test  # noqa: E402
 from src.timeutil import format_hk, now_hk, today_hk  # noqa: E402
@@ -40,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     race_date = args.race_date.strip() or None
     cfg = load_config()
+    mark_job_start()
     log(f"scraper_runner command={args.command} date={race_date or today_hk()} tz=Asia/Hong_Kong")
     write_status(state="running", last_message=f"command {args.command}", workflow="hkjc_monitor")
     try:

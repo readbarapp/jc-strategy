@@ -1,6 +1,6 @@
 <h1>資料收集、分析同警報：技術說明</h1>
 <p>呢份講程式 <strong>實際去邊、抄邊格、點計、點推播</strong>。對應程式：<code>src/hkjc_client.py</code>（拎數）、<code>src/monitor.py</code>（時間同寫入）、<code>src/odds_math.py</code>（啡格）、<code>src/backtest.py</code> 同 <code>docs/assets/engine.js</code>（分析）、<code>src/telegram_notify.py</code>（警報）。</p>
-<p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。</p>
+<p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。第一次真實 crawl 會刪晒示範列（<code>data/dataset_origin.json</code> 由 <code>demo</code> 轉 <code>live</code>）。</p>
 <hr />
 <h2>一、整體流程</h2>
 <pre><code>GitHub Actions（香港時間 09:00–00:30 每隔約 30 分鐘偵測，或你人手觸發）
@@ -15,10 +15,13 @@ scraper_runner.py auto
         │     有、賽日進行中 → 高頻抄賠率
         │     有、全部完咗 → 抄官方賽果
         │
+        ├─ 第一次真實寫入 → 刪晒示範 CSV
         ├─ 每個時間點：GraphQL 獨贏+位置（失敗改 getJSON）
+        ├─ HTTP 429／403／斷線 → 退後 8–120 秒再試，之後減慢輪詢
         ├─ 計啡格（對上一個時間點，T-1 對 T-5）
         ├─ 符合 Telegram 規則 → Bot API 即刻 sendMessage
         ├─ 寫入 data/*.csv，大約每 120 秒 git push
+        ├─ 接近 Actions 6 小時上限（約 5 小時 30 分）→ 開新 workflow 繼續
         └─ 鏡像到 docs/ 畀 GitHub Pages 顯示</code></pre>
 <p>瀏覽器 <strong>唔會</strong> 自己去馬會網站爬。你開網站只係讀 repo 入面已經寫好嘅 CSV。真正 crawl 只發生喺 GitHub Actions 嘅 Ubuntu runner。</p>
 <hr />

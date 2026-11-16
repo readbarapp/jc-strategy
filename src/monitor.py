@@ -16,6 +16,83 @@ from .odds_math import DEFAULT_CHECKPOINTS, is_brown_grid, match_checkpoint, par
 from .status import load_status, write_status
 from .timeutil import format_hk, minutes_until, now_hk, plus_minutes, to_hk, today_hk
 
+CHECKPOINT_ORDER = {"T-15": 0, "T-10": 1, "T-5": 2, "T-1": 3, "T-0": 4}
+DEFAULT_JOB_BUDGET_SECONDS = 330 * 60
+_JOB_START = time.monotonic()
+
+
+def mark_job_start() -> None:
+    global _JOB_START
+    _JOB_START = time.monotonic()
+
+
+def job_seconds_used() -> float:
+    return time.monotonic() - _JOB_START
+
+
+def should_handoff(elapsed_seconds: float | None = None, budget_seconds: float | None = None) -> bool:
+    """True when this Actions job should exit and start a successor before the 6h kill."""
+    elapsed = job_seconds_used() if elapsed_seconds is None else elapsed_seconds
+    if budget_seconds is None:
+        budget_seconds = float(os.environ.get("HKJC_JOB_BUDGET_SECONDS") or DEFAULT_JOB_BUDGET_SECONDS)
+    return elapsed >= float(budget_seconds)
+
+
+def restore_monitor_state(meeting: Meeting) -> tuple[dict[tuple[int, int], float], set[tuple[int, int, str]], set[tuple[int, int]]]:
+    """Reload today's snapshots so a continuation job does not recapture or re-alert."""
+    checkpoint_odds: dict[tuple[int, int], float] = {}
+    captured: set[tuple[int, int, str]] = set()
+    alerted: set[tuple[int, int]] = set()
+    rows = [
+        row
+        for row in csv_store.load_odds()
+        if str(row.get("race_date")) == meeting.race_date and str(row.get("venue")) == meeting.venue
+    ]
+    rows.sort(
+        key=lambda row: (
+            int(float(row.get("race_no") or 0)),
+            int(float(row.get("horse_no") or 0)),
+            CHECKPOINT_ORDER.get(str(row.get("checkpoint") or ""), 99),
+        )
+    )
+    for row in rows:
+        try:
+            race_no = int(float(row.get("race_no") or 0))
+            horse_no = int(float(row.get("horse_no") or 0))
+        except (TypeError, ValueError):
+            continue
+        checkpoint = str(row.get("checkpoint") or "")
+        if not race_no or not horse_no or not checkpoint:
+            continue
+        captured.add((race_no, horse_no, checkpoint))
+        win = parse_odds(row.get("win_odds"))
+        if win is not None:
+            checkpoint_odds[(race_no, horse_no)] = win
+    if captured:
+        log(f"Restored {len(captured)} captured checkpoints from CSV for continuation")
+    return checkpoint_odds, captured, alerted
+
+
+def _handoff(meeting: Meeting) -> str:
+    gitops.persist_and_push("data: handoff before Actions 6h limit")
+    ok = gitops.dispatch_monitor("auto", meeting.race_date)
+    msg = (
+        "已接近 GitHub Actions 6 小時上限，已開下一段繼續監控"
+        if ok
+        else "已接近 6 小時上限；若未能自動續跑，半小時排程會接"
+    )
+    log(msg, level="WARN" if not ok else "INFO")
+    write_status(
+        state="idle",
+        is_race_day=True,
+        venue=meeting.venue,
+        race_date=meeting.race_date,
+        last_message=msg,
+        last_sync=format_hk(now_hk()),
+    )
+    gitops.persist_and_push("status: monitor handoff")
+    return "handoff"
+
 
 def _bool_str(value: bool) -> str:
     return "true" if value else "false"
@@ -146,11 +223,11 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
     if now < first_watch:
         log(f"Waiting until {format_hk(first_watch)} HKT before high-frequency capture")
         while now_hk() < first_watch:
+            if should_handoff():
+                return _handoff(meeting)
             time.sleep(min(60, max(5, (first_watch - now_hk()).total_seconds())))
 
-    checkpoint_odds: dict[tuple[int, int], float] = {}
-    captured: set[tuple[int, int, str]] = set()
-    alerted: set[tuple[int, int]] = set()
+    checkpoint_odds, captured, alerted = restore_monitor_state(meeting)
     monitored: list[int] = []
     last_commit = time.time()
     log(
@@ -159,6 +236,8 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
     )
 
     while now_hk() <= end_at:
+        if should_handoff():
+            return _handoff(meeting)
         cfg = load_config()
         interval = scrape_interval(cfg)
         idle = max(interval, int(cfg["data"].get("idle_poll_seconds", 60)))
@@ -205,9 +284,9 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
             gitops.persist_and_push()
             last_commit = time.time()
 
-        # Slow down when no race is within 20 minutes
+        # Slow down when no race is within 20 minutes, and after HTTP 429/403
         sleep_for = interval if nearest is not None and nearest <= 20 else idle
-        time.sleep(sleep_for)
+        time.sleep(client.recommended_sleep(sleep_for))
 
     log("Odds loop finished — harvesting official results")
     collect_results(client, meeting)

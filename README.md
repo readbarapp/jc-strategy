@@ -135,7 +135,7 @@ GitHub Pages 本身是靜態的。要從瀏覽器改 repo 檔案或觸發 Action
 
 ### 示範數據 vs 真實數據
 
-`scripts/generate_sample_data.py` 產生的歷史賽日是 **模擬示範數據**（假數據），方便 Pages 一打開就能回測，**不是**馬會官方紀錄。GitHub Actions 在真正的香港賽馬日會把真實賠率／賽果追加進同一個 CSV。
+`scripts/generate_sample_data.py` 產生的歷史賽日是 **模擬示範數據**（假數據），方便 Pages 一打開就能回測，**不是**馬會官方紀錄。第一次 GitHub Actions 成功抄到真實馬會賠率／賽果時，會**刪除全部示範列**，之後回測只用真實紀錄。
 
 ### 數據中心：獨贏同位置分開兩張表
 

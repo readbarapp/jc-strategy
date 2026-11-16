@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 from typing import Iterable
 
+from .logger import log
 from .odds_board import WIDE_FIELDS, pivot_odds
 from .schema import ODDS_FIELDS, RESULTS_FIELDS
+from .timeutil import iso_hk, now_hk
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
@@ -17,6 +20,8 @@ RESULTS_PATH = DATA_DIR / "race_results.csv"
 BOARD_PATH = DATA_DIR / "odds_board.csv"
 WIN_BOARD_PATH = DATA_DIR / "win_board.csv"
 PLACE_BOARD_PATH = DATA_DIR / "place_board.csv"
+ORIGIN_PATH = DATA_DIR / "dataset_origin.json"
+DOCS_ORIGIN_PATH = DOCS_DATA / "dataset_origin.json"
 
 
 def _ensure(path: Path, fields: list[str]) -> None:
@@ -86,13 +91,64 @@ def rebuild_odds_board(threshold: float = 50.0) -> None:
     write_rows(BOARD_PATH, WIDE_FIELDS, win_rows)
 
 
+def dataset_origin() -> str:
+    if ORIGIN_PATH.exists():
+        try:
+            payload = json.loads(ORIGIN_PATH.read_text(encoding="utf-8"))
+            origin = str(payload.get("origin") or "").strip().lower()
+            if origin in {"demo", "live", "empty"}:
+                return origin
+        except json.JSONDecodeError:
+            pass
+    if ODDS_PATH.exists() and ODDS_PATH.stat().st_size > 80:
+        return "demo"
+    return "empty"
+
+
+def set_dataset_origin(origin: str, note: str = "") -> None:
+    payload = {
+        "origin": origin,
+        "note": note,
+        "updated_at": iso_hk(now_hk()),
+    }
+    text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    ORIGIN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ORIGIN_PATH.write_text(text, encoding="utf-8")
+    DOCS_ORIGIN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DOCS_ORIGIN_PATH.write_text(text, encoding="utf-8")
+
+
+def purge_demo_tables() -> None:
+    """Drop generated sample rows so backtests only see live HKJC captures."""
+    write_rows(ODDS_PATH, ODDS_FIELDS, [])
+    write_rows(RESULTS_PATH, RESULTS_FIELDS, [])
+    rebuild_odds_board()
+    log("Purged demo sample CSVs — dashboard will only show live HKJC rows")
+
+
+def prepare_for_live_rows(incoming: list[dict]) -> bool:
+    """On the first real capture, delete every demo row. Returns True if a purge ran."""
+    if not incoming:
+        return False
+    if dataset_origin() == "live":
+        return False
+    purge_demo_tables()
+    set_dataset_origin(
+        "live",
+        "demo sample deleted after the first live HKJC capture",
+    )
+    return True
+
+
 def upsert_odds(rows: list[dict]) -> int:
+    prepare_for_live_rows(rows)
     added = upsert(ODDS_PATH, ODDS_FIELDS, rows, _key_odds)
     rebuild_odds_board()
     return added
 
 
 def upsert_results(rows: list[dict]) -> int:
+    prepare_for_live_rows(rows)
     return upsert(RESULTS_PATH, RESULTS_FIELDS, rows, _key_result)
 
 
@@ -112,6 +168,7 @@ def copy_to_docs() -> None:
         (WIN_BOARD_PATH, DOCS_DATA / "win_board.csv"),
         (PLACE_BOARD_PATH, DOCS_DATA / "place_board.csv"),
         (RESULTS_PATH, DOCS_DATA / "race_results.csv"),
+        (ORIGIN_PATH, DOCS_ORIGIN_PATH),
         (ROOT / "config.json", ROOT / "docs" / "config.json"),
         (ROOT / "status.json", ROOT / "docs" / "status.json"),
         (ROOT / "logs" / "latest.log", ROOT / "docs" / "logs" / "latest.log"),

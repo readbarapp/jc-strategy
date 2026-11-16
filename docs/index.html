@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/app.css?v=20261116e" />
+  <link rel="stylesheet" href="./assets/app.css?v=20261116f" />
 </head>
 <body class="min-h-screen text-slate-100 rail">
   <div class="flex min-h-screen">
@@ -66,6 +66,7 @@
 
         <!-- DATA -->
         <section data-panel="data" class="space-y-6">
+          <p id="data-origin-banner" class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">數據來源載入中…</p>
           <article class="kpi-card">
             <h2 class="text-sm font-semibold text-gold-300">點樣收錄數據（用日常說話講）</h2>
             <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-slate-300">
@@ -73,7 +74,7 @@
               <li>開跑前 15、10、5、1 分鐘同開跑嗰下，分別向馬會問<strong class="text-gold-300">兩個獨立彩池</strong>：獨贏（WIN）同位置（PLA）。兩個數字分開寫入兩欄，唔會撈亂。唔再抄開賽前 3 分鐘。</li>
               <li>獨贏啡格：呢個鐘點嘅<strong class="text-gold-300">獨贏</strong>比起<strong class="text-gold-300">上一個鐘點（大約 5 分鐘前）</strong>平咗一半或以上。例如開賽前 1 分鐘同開賽前 5 分鐘比。位置表用同樣方法睇位置急跌，但策略／通知預設仍然用獨贏啡格做訊號。</li>
               <li>賽事完咗再抄官方名次、獨贏派彩、位置派彩（每 $10）。回測「只買位置」用嘅係呢個官方位置派彩，唔係開賽前位置賠率去估。</li>
-              <li>而家表入面舊日子係<strong class="text-amber-200">示範假數據</strong>（欄位同真 crawl 一模一樣）。真賽日同一套程式把馬會回覆寫入同一批 CSV。</li>
+              <li>而家表入面舊日子係<strong class="text-amber-200">示範假數據</strong>。第一次抄到真實馬會賠率／賽果嗰下，程式會<strong class="text-gold-300">刪晒全部示範列</strong>，之後回測只睇真實紀錄。</li>
             </ol>
             <details class="mt-4 text-xs leading-relaxed text-slate-400">
               <summary class="cursor-pointer text-gold-300">技術細節：點樣向馬會拎賠率（唔係亂填）</summary>
@@ -296,6 +297,8 @@
               <li>排程全日每隔大約半個鐘問馬會今日有冇賽、第一場官方開跑時間幾點；到監控窗（第一場前約 20 分鐘）先開始抄數。</li>
               <li><strong class="text-slate-200">PAT</strong> 只係你喺呢個網站改 <span class="mono">config.json</span>、人手撳「觸發今日監控」先用到。入咗 PAT 唔等於替你排程。</li>
               <li>Telegram 推播另外要 repo Secret <span class="mono">TELEGRAM_BOT_TOKEN</span>；Actions 寫入權限要設成 Read and write。</li>
+              <li>接近開跑先 10 秒抄一次；場次之間會慢落 60 秒。若馬會回 429／403，會自動退後再試，唔會死循環狂打。</li>
+              <li>GitHub 單一 job 最長 6 小時。到大約 5 小時 30 分會自己再開下一段繼續抄，唔會無聲停。</li>
             </ul>
           </article>
 
@@ -416,6 +419,7 @@
 <h3>賽事進行中</h3>
 <p>網站唔會替你落飛。警報只係話「呢隻馬喺你定嘅規則下出現啡格」。你自己決定買獨贏、位置定兩者。</p>
 <p>數據大約每 <strong>120 秒</strong> 先 commit 上 GitHub 一次，所以網站表格可能遲一兩分鐘，但 Telegram 係抄到嗰下即刻送。</p>
+<p>接近開跑先 10 秒問一次馬會；隔開場次會慢到 60 秒。若被擋（429／403）會自動停一停再試。單一 Actions job 最長 6 小時，到大約 5 小時 30 分會自己再開下一段繼續抄。第一次抄到真實數據會刪晒示範假數據，之後回測只用真實場次。</p>
 <h3>最後一場完咗</h3>
 <p>監控會再等大約 <strong>25 分鐘</strong>，然後抄官方賽果（名次、獨贏派彩、位置派彩）。零晨 00:20 再補一次。</p>
 <p>第二朝你可以：</p>
@@ -476,7 +480,7 @@
             <div class="guide-prose">
 <h1>資料收集、分析同警報：技術說明</h1>
 <p>呢份講程式 <strong>實際去邊、抄邊格、點計、點推播</strong>。對應程式：<code>src/hkjc_client.py</code>（拎數）、<code>src/monitor.py</code>（時間同寫入）、<code>src/odds_math.py</code>（啡格）、<code>src/backtest.py</code> 同 <code>docs/assets/engine.js</code>（分析）、<code>src/telegram_notify.py</code>（警報）。</p>
-<p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。</p>
+<p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。第一次真實 crawl 會刪晒示範列（<code>data/dataset_origin.json</code> 由 <code>demo</code> 轉 <code>live</code>）。</p>
 <hr />
 <h2>一、整體流程</h2>
 <pre><code>GitHub Actions（香港時間 09:00–00:30 每隔約 30 分鐘偵測，或你人手觸發）
@@ -491,10 +495,13 @@ scraper_runner.py auto
         │     有、賽日進行中 → 高頻抄賠率
         │     有、全部完咗 → 抄官方賽果
         │
+        ├─ 第一次真實寫入 → 刪晒示範 CSV
         ├─ 每個時間點：GraphQL 獨贏+位置（失敗改 getJSON）
+        ├─ HTTP 429／403／斷線 → 退後 8–120 秒再試，之後減慢輪詢
         ├─ 計啡格（對上一個時間點，T-1 對 T-5）
         ├─ 符合 Telegram 規則 → Bot API 即刻 sendMessage
         ├─ 寫入 data/*.csv，大約每 120 秒 git push
+        ├─ 接近 Actions 6 小時上限（約 5 小時 30 分）→ 開新 workflow 繼續
         └─ 鏡像到 docs/ 畀 GitHub Pages 顯示</code></pre>
 <p>瀏覽器 <strong>唔會</strong> 自己去馬會網站爬。你開網站只係讀 repo 入面已經寫好嘅 CSV。真正 crawl 只發生喺 GitHub Actions 嘅 Ubuntu runner。</p>
 <hr />
@@ -660,7 +667,7 @@ scraper_runner.py auto
 <tr><td>馬名</td><td>程式內建中文名單</td><td>GraphQL <code>name_ch</code></td></tr>
 <tr><td>獨贏／位置</td><td>隨機模擬，兩欄分開</td><td>馬會 WIN／PLA 兩池</td></tr>
 <tr><td>派彩</td><td>用終賠估算</td><td>賽果頁派彩表</td></tr>
-<tr><td>會唔會互相覆蓋</td><td>只喺你故意跑 <code>demo-data</code></td><td>upsert：同一場同一時間點會更新，唔同時間點就追加</td></tr>
+<tr><td>會唔會互相覆蓋</td><td>第一次真實 crawl 會刪晒示範列</td><td>upsert：同一場同一時間點會更新，唔同時間點就追加</td></tr>
 </tbody></table>
 <p>想核對「而家係咪真係抄緊馬會」：賽日開住 Actions log，應該見到 GraphQL 或 <code>getJSON winplaodds</code>，同埋 <code>Wrote N odds rows</code>。網站馬名應係中文，獨贏同位置數字唔應該成表相同。</p>
             </div>
@@ -670,8 +677,8 @@ scraper_runner.py auto
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <script src="./assets/core.js?v=20261116e"></script>
-  <script src="./assets/engine.js?v=20261116e"></script>
-  <script src="./assets/app.js?v=20261116e"></script>
+  <script src="./assets/core.js?v=20261116f"></script>
+  <script src="./assets/engine.js?v=20261116f"></script>
+  <script src="./assets/app.js?v=20261116f"></script>
 </body>
 </html>

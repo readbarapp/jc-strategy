@@ -2,7 +2,7 @@
 
 呢份講程式 **實際去邊、抄邊格、點計、點推播**。對應程式：`src/hkjc_client.py`（拎數）、`src/monitor.py`（時間同寫入）、`src/odds_math.py`（啡格）、`src/backtest.py` 同 `docs/assets/engine.js`（分析）、`src/telegram_notify.py`（警報）。
 
-示範 CSV 由 `scripts/generate_sample_data.py` 產生，**真賽日唔會跑呢個產生器**。
+示範 CSV 由 `scripts/generate_sample_data.py` 產生，**真賽日唔會跑呢個產生器**。第一次真實 crawl 會刪晒示範列（`data/dataset_origin.json` 由 `demo` 轉 `live`）。
 
 ---
 
@@ -21,10 +21,13 @@ scraper_runner.py auto
         │     有、賽日進行中 → 高頻抄賠率
         │     有、全部完咗 → 抄官方賽果
         │
+        ├─ 第一次真實寫入 → 刪晒示範 CSV
         ├─ 每個時間點：GraphQL 獨贏+位置（失敗改 getJSON）
+        ├─ HTTP 429／403／斷線 → 退後 8–120 秒再試，之後減慢輪詢
         ├─ 計啡格（對上一個時間點，T-1 對 T-5）
         ├─ 符合 Telegram 規則 → Bot API 即刻 sendMessage
         ├─ 寫入 data/*.csv，大約每 120 秒 git push
+        ├─ 接近 Actions 6 小時上限（約 5 小時 30 分）→ 開新 workflow 繼續
         └─ 鏡像到 docs/ 畀 GitHub Pages 顯示
 ```
 
