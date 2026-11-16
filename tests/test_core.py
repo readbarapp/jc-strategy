@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.backtest import evaluate, race_day_count
+from src.backtest import evaluate, race_day_count, yearly_bets
 from src.csv_store import load_odds, load_results
 from src.hkjc_client import HKJCClient
 from src.monitor import plan_auto
@@ -318,6 +318,19 @@ def test_plan_auto_uses_actual_post_times():
     assert hv_near.action == "monitor"
 
 
+def test_yearly_bets_is_frequency_times_race_days():
+    assert yearly_bets(2.5, 88) == 220
+    assert yearly_bets(3.2, 88) == 282
+    assert yearly_bets(0, 88) == 0
+    odds = load_odds()
+    results = load_results()
+    stats = evaluate(
+        odds, results, min_odds=3.5, max_odds=9.0, bet_type="win", stake=10, threshold=50, checkpoint="T-1"
+    )
+    expected = round(stats["triggers_per_race_day"] * 88)
+    assert yearly_bets(stats["triggers_per_race_day"], 88) == expected
+
+
 if __name__ == "__main__":
     test_timezone_is_hong_kong()
     test_drop_and_brown_grid()
@@ -331,4 +344,5 @@ if __name__ == "__main__":
     test_winplaodds_string_keeps_pools_apart()
     test_telegram_uses_own_checkpoint_odds_and_bet_label()
     test_plan_auto_uses_actual_post_times()
+    test_yearly_bets_is_frequency_times_race_days()
     print("all tests ok")

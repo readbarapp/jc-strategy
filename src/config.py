@@ -34,6 +34,7 @@ DEFAULTS: dict[str, Any] = {
     "monte_carlo": {
         "initial_bankroll": 10000,
         "stake": 10,
+        "race_days_per_year": 88,
         "races_per_year": 400,
         "simulations": 1000,
     },

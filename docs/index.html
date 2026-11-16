@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/app.css?v=20261116d" />
+  <link rel="stylesheet" href="./assets/app.css?v=20261116e" />
 </head>
 <body class="min-h-screen text-slate-100 rail">
   <div class="flex min-h-screen">
@@ -214,13 +214,14 @@
 
           <article class="kpi-card">
             <h2 class="text-sm font-semibold text-gold-300">蒙地卡羅盈虧與回撤預測</h2>
-            <p class="mt-1 text-xs text-slate-500">以回測注的實際 PnL 做 1,000 次有放回抽樣路徑，估算年化回報、MDD 與破產概率。</p>
+            <p class="mt-1 text-xs text-slate-500">每年預計落注場次用<strong class="text-gold-300">策略頻率 × 一年賽馬日</strong>自動計（馬會一年大約 80–90 日，預設 88）。模擬下注次數係用歷史注隨機重抽幾多條「一年路徑」，用來估年化回報、MDD 同破產機會。</p>
             <div class="mt-4 grid gap-3 md:grid-cols-4">
               <label class="text-xs text-slate-400">初始本金<input id="mc-bankroll" type="number" class="field mt-1" value="10000" /></label>
               <label class="text-xs text-slate-400">每注金額<input id="mc-stake" type="number" class="field mt-1" value="10" /></label>
-              <label class="text-xs text-slate-400">每年預計落注場次<input id="mc-races" type="number" class="field mt-1" value="400" /></label>
-              <label class="text-xs text-slate-400">模擬次數<input id="mc-sims" type="number" class="field mt-1" value="1000" /></label>
+              <label class="text-xs text-slate-400">一年賽馬日<input id="mc-days" type="number" min="1" class="field mt-1" value="88" /></label>
+              <label class="text-xs text-slate-400">模擬下注次數<input id="mc-sims" type="number" min="1" class="field mt-1" value="1000" /></label>
             </div>
+            <p id="mc-year-bets" class="mt-3 text-sm text-slate-300">每年預計落注場次：—</p>
           </article>
           <div id="mc-kpis" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"></div>
           <article class="kpi-card">
@@ -443,7 +444,7 @@
 <li>只買位置：官方位置派彩 − $10（唔會用獨贏去估位置）</li>
 <li>獨贏 + 位置：兩筆 $10</li>
 </ul>
-<p>EV／ROI = 歷史跟呢條規則落注嘅淨盈虧 ÷ 總本金。<strong>策略頻率</strong> = 總觸發次數 ÷ 賠率樣本入面有幾多個賽馬日（冇觸發嘅賽日都計），即大約一個賽馬日有幾多次投注機會。蒙地卡羅再用呢啲盈虧隨機重覆 1,000 次，估一年後賺幾多、回撤同破產機會。</p>
+<p>EV／ROI = 歷史跟呢條規則落注嘅淨盈虧 ÷ 總本金。<strong>策略頻率</strong> = 總觸發次數 ÷ 賠率樣本入面有幾多個賽馬日（冇觸發嘅賽日都計），即大約一個賽馬日有幾多次投注機會。蒙地卡羅每年落注場次 = 頻率 × 一年賽馬日（預設 88）；<strong>模擬下注次數</strong>係隨機重抽幾多條一年路徑，估一年後賺幾多、回撤同破產機會。</p>
 <h3>Telegram 控制</h3>
 <p>投注方法、開賽前幾多分鐘、獨贏範圍可以同策略唔同。訊息會同時顯示獨贏同位置數字。要收到正式賽日警報，GitHub Secret 一定要有 bot token。</p>
 <h3>即時狀態 · 日誌</h3>
@@ -623,7 +624,7 @@ scraper_runner.py auto
 <ol>
 <li>EV／ROI = 總盈虧 ÷ 總本金。</li>
 </ol>
-<p>蒙地卡羅：把歷史每注實際 PnL 有放回抽樣 1,000 條路徑，畫資金 P10–P90。</p>
+<p>蒙地卡羅：每年落注場次 = 策略頻率 × 一年賽馬日（預設 88）。模擬下注次數係隨機重抽幾多條一年路徑，每條用歷史每注實際 PnL 有放回抽樣，畫資金 P10–P90。</p>
 <hr />
 <h2>五、點樣 send alert</h2>
 <p>程式 <strong>唔經網站轉發</strong>。Actions 跑緊 <code>snapshot_race</code> 寫完一列，即刻喺同一進程呼叫 Telegram。</p>
@@ -669,8 +670,8 @@ scraper_runner.py auto
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <script src="./assets/core.js?v=20261116d"></script>
-  <script src="./assets/engine.js?v=20261116d"></script>
-  <script src="./assets/app.js?v=20261116d"></script>
+  <script src="./assets/core.js?v=20261116e"></script>
+  <script src="./assets/engine.js?v=20261116e"></script>
+  <script src="./assets/app.js?v=20261116e"></script>
 </body>
 </html>

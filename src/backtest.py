@@ -6,6 +6,8 @@ from typing import Iterable
 
 from .odds_math import parse_odds
 
+DEFAULT_RACE_DAYS_PER_YEAR = 88
+
 
 def _truthy(value) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "y"}
@@ -48,6 +50,16 @@ def trigger_rows(
         item["win_odds"] = win
         best[key] = item
     return list(best.values())
+
+
+def yearly_bets(
+    triggers_per_race_day: float,
+    race_days_per_year: float = DEFAULT_RACE_DAYS_PER_YEAR,
+) -> int:
+    """Expected bets in a HKJC season: strategy frequency × race days per year."""
+    days = max(1, int(race_days_per_year or DEFAULT_RACE_DAYS_PER_YEAR))
+    freq = float(triggers_per_race_day or 0)
+    return max(0, int(round(freq * days)))
 
 
 def race_day_count(rows: Iterable[dict]) -> int:

@@ -2,7 +2,7 @@
 (function () {
   const { formatHk, weekdayZh, parseCsv, toCsv, downloadBlob, detectRepo, saveRepo,
     loadRelativeOrRaw, ghPutFile, ghDispatch, ghLatestRun, num, isTrue } = window.HKJC;
-  const { evaluate, monteCarlo, pivotOdds } = window.HKJCEngine;
+  const { evaluate, monteCarlo, pivotOdds, yearlyBets } = window.HKJCEngine;
 
   const ODDS_BOARD_COLS = [
     { key: "odds_t15", label: "開賽前15分鐘", brownKey: null },
@@ -167,7 +167,7 @@
     $("checkpoint").value = s.checkpoint || "T-1";
     $("mc-bankroll").value = m.initial_bankroll ?? 10000;
     $("mc-stake").value = m.stake ?? 10;
-    $("mc-races").value = m.races_per_year ?? 400;
+    $("mc-days").value = m.race_days_per_year ?? 88;
     $("mc-sims").value = m.simulations ?? 1000;
     $("tg-enabled").checked = !!t.enabled;
     $("tg-chat").value = t.chat_id || "";
@@ -436,6 +436,7 @@
   function runMonteCarlo() {
     const bt = state.backtest;
     if (!bt || !bt.trades.length) {
+      if ($("mc-year-bets")) $("mc-year-bets").textContent = "每年預計落注場次：—（呢組參數未有觸發注）";
       $("mc-kpis").innerHTML = kpi("x", "需要回測注", "—", "先讓策略產生觸發");
       if (state.chart) {
         state.chart.destroy();
@@ -443,17 +444,25 @@
       }
       return;
     }
+    const days = Math.max(1, Math.floor(num($("mc-days").value, 88)));
+    const freq = Number(bt.triggers_per_race_day || 0);
+    const races = yearlyBets(freq, days);
+    if ($("mc-year-bets")) {
+      $("mc-year-bets").innerHTML =
+        `每年預計落注場次：<span class="font-mono text-gold-300">${races}</span> 注` +
+        `　（頻率 ${freq.toFixed(1)} 注／賽馬日 × ${days} 個賽馬日）`;
+    }
     const mc = monteCarlo(bt.trades, {
       bankroll: num($("mc-bankroll").value, 10000),
       stake: num($("mc-stake").value, 10),
-      races: num($("mc-races").value, 400),
+      races: Math.max(1, races),
       sims: num($("mc-sims").value, 1000),
     });
     state.mc = mc;
     $("mc-kpis").innerHTML = [
-      kpi("e", "預期年化回報", (mc.expected_pnl >= 0 ? "+" : "") + Math.round(mc.expected_pnl), `期末資金 $${Math.round(mc.expected_final)}`),
+      kpi("e", "預期年化回報", (mc.expected_pnl >= 0 ? "+" : "") + Math.round(mc.expected_pnl), `期末資金 $${Math.round(mc.expected_final)} · ${mc.races} 注／年`),
       kpi("d", "最大回撤 MDD", (mc.mdd_median * 100).toFixed(1) + "%", `P95 ${(mc.mdd_p95 * 100).toFixed(1)}%`, "down"),
-      kpi("u", "破產概率", mc.ruin.toFixed(2) + "%", `${mc.sims} 條隨機路徑`, mc.ruin > 5 ? "down" : "up"),
+      kpi("u", "破產概率", mc.ruin.toFixed(2) + "%", `${mc.sims} 次模擬下注`, mc.ruin > 5 ? "down" : "up"),
       kpi("b", "P10–P90 期末", `$${Math.round(mc.p10_final)} – $${Math.round(mc.p90_final)}`, "資金分佈區間"),
     ].join("");
     drawChart(mc);
@@ -544,8 +553,10 @@
     cfg.strategy.checkpoint = $("checkpoint").value || "T-1";
     cfg.monte_carlo.initial_bankroll = num($("mc-bankroll").value, 10000);
     cfg.monte_carlo.stake = num($("mc-stake").value, 10);
-    cfg.monte_carlo.races_per_year = num($("mc-races").value, 400);
+    cfg.monte_carlo.race_days_per_year = Math.max(1, Math.floor(num($("mc-days").value, 88)));
     cfg.monte_carlo.simulations = num($("mc-sims").value, 1000);
+    const freq = state.backtest ? Number(state.backtest.triggers_per_race_day || 0) : 0;
+    cfg.monte_carlo.races_per_year = yearlyBets(freq, cfg.monte_carlo.race_days_per_year);
     cfg.telegram.enabled = $("tg-enabled").checked;
     cfg.telegram.chat_id = $("tg-chat").value.trim();
     cfg.telegram.bet_type = $("tg-bet-type").value;
@@ -661,7 +672,7 @@
       $("max-odds-val").textContent = Number($("max-odds").value).toFixed(1);
       runStrategy();
     });
-    ["bet-type", "checkpoint", "mc-bankroll", "mc-stake", "mc-races", "mc-sims"].forEach((id) => {
+    ["bet-type", "checkpoint", "mc-bankroll", "mc-stake", "mc-days", "mc-sims"].forEach((id) => {
       $(id).addEventListener("change", runStrategy);
       $(id).addEventListener("input", runStrategy);
     });
