@@ -47,6 +47,7 @@
     chart: null,
     backtest: null,
     mc: null,
+    dataOrigin: "demo",
   };
 
   const $ = (id) => document.getElementById(id);
@@ -124,24 +125,37 @@
   async function loadAll() {
     const g = state.github;
     try {
-      const [cfgText, oddsText, resText, statusText, logText] = await Promise.all([
+      const [cfgText, oddsText, resText, statusText, logText, originText] = await Promise.all([
         loadRelativeOrRaw(g, "./config.json", "config.json").catch(() => "{}"),
         loadRelativeOrRaw(g, "./data/odds_snapshots.csv", "data/odds_snapshots.csv"),
         loadRelativeOrRaw(g, "./data/race_results.csv", "data/race_results.csv"),
         loadRelativeOrRaw(g, "./status.json", "status.json").catch(() => "{}"),
         loadRelativeOrRaw(g, "./logs/latest.log", "logs/latest.log").catch(() => ""),
+        loadRelativeOrRaw(g, "./data/dataset_origin.json", "data/dataset_origin.json").catch(() => '{"origin":"demo"}'),
       ]);
       state.config = JSON.parse(cfgText || "{}");
       state.odds = parseCsv(oddsText);
       state.results = parseCsv(resText);
       state.status = JSON.parse(statusText || "{}");
       state.logText = logText;
+      try {
+        state.dataOrigin = JSON.parse(originText || "{}").origin || "demo";
+      } catch {
+        state.dataOrigin = "demo";
+      }
       hydrateForms();
       fillFilterOptions();
       renderDataTable();
       renderStatus();
       runStrategy();
-      toast(`已載入 ${oddsBoard().length} 匹馬賠率走勢、賽果 ${state.results.length} 列（示範歷史為模擬數據）`, "ok");
+      renderDataOrigin();
+      const live = state.dataOrigin === "live";
+      toast(
+        live
+          ? `已載入真實馬會數據：${oddsBoard().length} 匹馬賠率走勢、賽果 ${state.results.length} 列（示範已刪）`
+          : `已載入 ${oddsBoard().length} 匹馬賠率走勢、賽果 ${state.results.length} 列（而家仲係示範假數據；第一次真實 crawl 會刪晒）`,
+        "ok"
+      );
     } catch (err) {
       toast(err.message || String(err), "error");
     }
@@ -183,6 +197,18 @@
     $("gh-branch").value = state.github.branch || "main";
     $("gh-token").value = state.github.token || "";
     updateGhBadge();
+  }
+
+  function renderDataOrigin() {
+    const el = $("data-origin-banner");
+    if (!el) return;
+    const live = state.dataOrigin === "live";
+    el.className = live
+      ? "rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
+      : "rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100";
+    el.textContent = live
+      ? "數據來源：真實馬會紀錄。示範假數據已喺第一次成功 crawl 時全部刪除，策略回測只用真實場次。"
+      : "數據來源：示範假數據。等星期三（或任何真賽日）第一次抄到馬會賠率／賽果，就會自動刪晒呢批示範，之後只顯示真實紀錄。";
   }
 
   function updateGhBadge() {

@@ -33,7 +33,9 @@ concurrency:
 
 permissions:
   contents: write
-  actions: read
+  actions: write
+
+# actions: write lets this job dispatch a successor before the 6-hour runner kill.
 
 jobs:
   monitor:
@@ -44,6 +46,8 @@ jobs:
       TZ: Asia/Hong_Kong
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      # Exit ~30 minutes before GitHub kills the job, then dispatch a continuation.
+      HKJC_JOB_BUDGET_SECONDS: "19800"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
