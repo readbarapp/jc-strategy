@@ -1,0 +1,91 @@
+:root {
+  --ink: #070b12;
+  --gold: #e4c36a;
+}
+html, body { background: var(--ink); }
+body { font-family: "IBM Plex Sans", "Noto Sans TC", system-ui, sans-serif; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.nav-active {
+  background: linear-gradient(90deg, rgba(228,195,106,.18), transparent);
+  color: #fde68a;
+  border-color: rgba(228,195,106,.35);
+}
+.kpi-card {
+  background: linear-gradient(180deg, rgba(20,28,46,.9), rgba(12,18,32,.9));
+  border: 1px solid rgba(228,195,106,.12);
+  border-radius: 1rem;
+  padding: 1rem 1.1rem;
+}
+.grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+.grid-table th {
+  position: sticky;
+  top: 0;
+  background: #10182a;
+  color: #94a3b8;
+  font-weight: 500;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  white-space: nowrap;
+}
+.grid-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+.grid-table tr:hover td { background: rgba(228,195,106,.05); }
+.row-brown td {
+  background: rgba(180,83,9,.22) !important;
+  color: #fde68a;
+}
+.chip-on {
+  background: rgba(228,195,106,.2);
+  color: #fde68a;
+  border-color: rgba(228,195,106,.4);
+}
+.log-view {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  background: #05080f;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 1rem;
+  padding: 1rem;
+  min-height: 280px;
+  max-height: 480px;
+  overflow: auto;
+  color: #86efac;
+}
+input[type="range"] { accent-color: #e4c36a; }
+.field {
+  background: #0c1220;
+  border: 1px solid rgba(255,255,255,.08);
+  color: #e2e8f0;
+  border-radius: .6rem;
+  padding: .55rem .75rem;
+  width: 100%;
+}
+.field:focus { outline: 2px solid rgba(228,195,106,.35); }
+.btn-gold {
+  background: linear-gradient(180deg, #e4c36a, #c9a227);
+  color: #1a1404;
+  font-weight: 600;
+}
+.btn-ghost {
+  border: 1px solid rgba(255,255,255,.12);
+  color: #e2e8f0;
+}
+.rail {
+  background:
+    radial-gradient(1200px 400px at 20% -10%, rgba(228,195,106,.12), transparent),
+    linear-gradient(180deg, #0b1220, #070b12);
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 99px; }

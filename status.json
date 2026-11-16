@@ -1,0 +1,13 @@
+{
+  "state": "idle",
+  "hk_time": "2026-11-16 12:00:00",
+  "is_race_day": false,
+  "venue": "",
+  "race_date": "2026-11-16",
+  "races_monitored_today": [],
+  "last_sync": "2026-11-16 12:00:00",
+  "last_message": "系統待命 — 開啟 GitHub Pages 後即可從網頁觸發監控",
+  "workflow": "hkjc_monitor",
+  "error": "",
+  "updated_at": "2026-11-16T12:00:00+08:00"
+}
