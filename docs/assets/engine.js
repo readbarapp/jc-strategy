@@ -173,8 +173,8 @@
     };
   }
 
-  const CHECKPOINTS = ["T-15", "T-10", "T-5", "T-3", "T-1", "T-0"];
-  const CP_SUFFIX = { "T-15": "t15", "T-10": "t10", "T-5": "t5", "T-3": "t3", "T-1": "t1", "T-0": "t0" };
+  const CHECKPOINTS = ["T-15", "T-10", "T-5", "T-1", "T-0"];
+  const CP_SUFFIX = { "T-15": "t15", "T-10": "t10", "T-5": "t5", "T-1": "t1", "T-0": "t0" };
 
   function pivotOdds(rows, threshold, pool) {
     const field = pool === "place" ? "place_odds" : "win_odds";

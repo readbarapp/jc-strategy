@@ -35,6 +35,9 @@ def is_brown_grid(drop_pct: float, threshold: float) -> bool:
     return float(drop_pct) >= float(threshold)
 
 
+DEFAULT_CHECKPOINTS = [15, 10, 5, 1, 0]
+
+
 def checkpoint_label(minutes: int) -> str:
     return f"T-{int(minutes)}"
 
@@ -43,14 +46,19 @@ def match_checkpoint(
     minutes_to_post: float,
     checkpoints: Iterable[int] | None = None,
 ) -> str | None:
-    """Map minutes-to-post into a T-n window. Returns None if outside racing window."""
-    points = sorted((int(x) for x in (checkpoints or [15, 10, 5, 3, 1, 0])), reverse=True)
+    """Map minutes-to-post onto a named checkpoint.
+
+    Each checkpoint only matches a short window around itself (about ±1.5 min),
+    so a 4-minute gap such as T-5 → T-1 is not filled by capturing at T-3.
+    Returns None outside those windows.
+    """
+    points = sorted((int(x) for x in (checkpoints or DEFAULT_CHECKPOINTS)), reverse=True)
     if minutes_to_post > points[0] + 1.5:
         return None
-    # Half-open windows between consecutive checkpoints, last window down to well after post.
-    bounds = points + [-30]
-    for high, low in zip(bounds[:-1], bounds[1:]):
-        mid = (high + low) / 2.0
-        if minutes_to_post > mid:
+    extended = points + [points[-1] - 30]
+    for high, low in zip(extended[:-1], extended[1:]):
+        upper = high + 0.75
+        lower = max(high - 1.5, (high + low) / 2.0)
+        if lower < minutes_to_post <= upper:
             return checkpoint_label(high)
-    return checkpoint_label(points[-1])
+    return None

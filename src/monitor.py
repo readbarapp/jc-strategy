@@ -9,7 +9,7 @@ from . import csv_store, gitops, telegram_notify
 from .config import brown_grid_threshold, load_config, scrape_interval
 from .hkjc_client import HKJCClient, Meeting
 from .logger import log, log_exception
-from .odds_math import is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
+from .odds_math import DEFAULT_CHECKPOINTS, is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
 from .status import write_status
 from .timeutil import format_hk, minutes_until, now_hk, plus_minutes, today_hk
 
@@ -48,14 +48,14 @@ def snapshot_race(
 ) -> list[dict]:
     """Write one snapshot per official checkpoint.
 
-    啡格 is vs the previous checkpoint (e.g. T-1 vs T-3), not vs the last 10s tick.
+    啡格 is vs the previous checkpoint (e.g. T-1 vs T-5), not vs the last 10s tick.
     """
     now = now_hk()
     post = HKJCClient.scheduled_datetime(meeting, race)
     if post:
         minutes = minutes_until(post, now)
         checkpoint = match_checkpoint(
-            minutes, cfg.get("data", {}).get("checkpoints_minutes") or [15, 10, 5, 3, 1, 0]
+            minutes, cfg.get("data", {}).get("checkpoints_minutes") or DEFAULT_CHECKPOINTS
         )
     else:
         checkpoint = "T-0"

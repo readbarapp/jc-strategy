@@ -34,7 +34,7 @@ def test_checkpoints():
     assert match_checkpoint(15) == "T-15"
     assert match_checkpoint(10) == "T-10"
     assert match_checkpoint(5) == "T-5"
-    assert match_checkpoint(3) == "T-3"
+    assert match_checkpoint(3) is None  # T-3 is not captured; gap between T-5 and T-1
     assert match_checkpoint(1) == "T-1"
     assert match_checkpoint(0) == "T-0"
     assert match_checkpoint(40) is None
@@ -67,6 +67,56 @@ def test_odds_board_one_row_per_horse():
     assert sample["brown_at"]
     assert sample["pool"] == "WIN"
     assert sample["odds_t15"] != "" or sample["odds_t10"] != ""
+    assert "odds_t3" not in sample
+
+
+def test_t1_brown_compares_to_t5_not_t3():
+    """T-1 啡格 uses T-5 odds even if a leftover T-3 snapshot exists."""
+    rows = [
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "1",
+            "horse_no": "7",
+            "horse_name": "和諧王",
+            "scheduled_time": "15:20:00",
+            "checkpoint": "T-5",
+            "win_odds": 10.0,
+            "place_odds": 3.0,
+        },
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "1",
+            "horse_no": "7",
+            "horse_name": "和諧王",
+            "scheduled_time": "15:20:00",
+            "checkpoint": "T-3",
+            "win_odds": 9.8,
+            "place_odds": 2.9,
+        },
+        {
+            "race_date": "2026-11-15",
+            "venue": "ST",
+            "race_no": "1",
+            "horse_no": "7",
+            "horse_name": "和諧王",
+            "scheduled_time": "15:20:00",
+            "checkpoint": "T-1",
+            "win_odds": 4.5,
+            "place_odds": 1.6,
+        },
+    ]
+    board = pivot_odds(rows, 50, pool="win")
+    assert len(board) == 1
+    row = board[0]
+    assert row["odds_t5"] == 10.0
+    assert row["odds_t1"] == 4.5
+    assert "odds_t3" not in row
+    assert row["brown_t1"] == "true"
+    assert "T-1" in row["brown_at"]
+    # 10.0 → 4.5 is 55%; 9.8 → 4.5 would also brown, but we must use T-5
+    assert abs(float(row["drop_t1"]) - 55.0) < 0.01
 
 
 def test_win_and_place_boards_are_separate():
@@ -239,6 +289,7 @@ if __name__ == "__main__":
     test_checkpoints()
     test_backtest_on_sample()
     test_odds_board_one_row_per_horse()
+    test_t1_brown_compares_to_t5_not_t3()
     test_win_and_place_boards_are_separate()
     test_t1_strategy_ignores_other_checkpoints()
     test_place_and_win_place_use_official_dividends_not_win_odds()
