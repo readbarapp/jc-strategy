@@ -1,0 +1,38 @@
+{
+  "timezone": "Asia/Hong_Kong",
+  "data": {
+    "brown_grid_drop_pct": 50,
+    "scrape_interval_seconds": 10,
+    "idle_poll_seconds": 60,
+    "commit_every_seconds": 120,
+    "checkpoints_minutes": [15, 10, 5, 3, 1, 0],
+    "venues": ["ST", "HV"],
+    "monitor_lead_minutes": 20,
+    "monitor_trail_minutes": 25
+  },
+  "strategy": {
+    "min_odds": 3.5,
+    "max_odds": 9.0,
+    "bet_type": "win",
+    "stake": 10
+  },
+  "monte_carlo": {
+    "initial_bankroll": 10000,
+    "stake": 10,
+    "races_per_year": 400,
+    "simulations": 1000
+  },
+  "telegram": {
+    "enabled": false,
+    "chat_id": "",
+    "bot_token": "",
+    "min_odds": 3.5,
+    "max_odds": 9.0,
+    "min_drop_pct": 20
+  },
+  "github": {
+    "owner": "",
+    "repo": "",
+    "branch": "main"
+  }
+}

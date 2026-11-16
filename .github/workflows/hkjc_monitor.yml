@@ -1,0 +1,68 @@
+name: HKJC Monitor
+
+on:
+  schedule:
+    # 11:00 HKT — Sha Tin afternoon meetings
+    - cron: "0 3 * * *"
+    # 17:30 HKT — Happy Valley / night meetings
+    - cron: "30 9 * * *"
+    # 00:20 HKT — harvest official results after the last race
+    - cron: "20 16 * * *"
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "auto | monitor | results | once | test-telegram | demo-data"
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - monitor
+          - results
+          - once
+          - test-telegram
+          - demo-data
+      race_date:
+        description: "Optional YYYY-MM-DD (Hong Kong calendar date)"
+        required: false
+        type: string
+
+concurrency:
+  group: hkjc-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  monitor:
+    name: Collect odds / results
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      TZ: Asia/Hong_Kong
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scraper
+        run: |
+          CMD="${{ github.event.inputs.command }}"
+          DATE="${{ github.event.inputs.race_date }}"
+          if [ -z "$CMD" ]; then CMD="auto"; fi
+          EXTRA=()
+          if [ -n "$DATE" ]; then EXTRA+=(--date "$DATE"); fi
+          python scraper_runner.py "$CMD" "${EXTRA[@]}"

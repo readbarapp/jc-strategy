@@ -1,0 +1,4 @@
+2026-11-16 12:00:00 HKT [INFO] HKJC Quant Desk 待命（Asia/Hong_Kong）
+2026-11-16 12:00:00 HKT [INFO] 示範歷史數據已載入 data/odds_snapshots.csv 與 data/race_results.csv
+2026-11-16 12:00:00 HKT [INFO] 透過 GitHub Pages「系統狀態」分頁可觸發 hkjc_monitor.yml
+2026-11-16 12:00:00 HKT [INFO] 今日若為香港賽馬日，Actions 會以 10 秒間隔捕捉 T-15 … T-0 賠率走勢
