@@ -1,13 +1,13 @@
 {
   "state": "idle",
-  "hk_time": "2026-11-16 22:43:42",
+  "hk_time": "2026-11-17 00:30:29",
   "is_race_day": false,
   "venue": "",
   "race_date": "2026-11-16",
   "races_monitored_today": [],
   "last_sync": "2026-11-16 22:43:42",
-  "last_message": "今日香港無賽馬日",
+  "last_message": "無賽果可收",
   "workflow": "hkjc_monitor",
   "error": "",
-  "updated_at": "2026-11-16T22:43:42+08:00"
+  "updated_at": "2026-11-17T00:30:29+08:00"
 }
