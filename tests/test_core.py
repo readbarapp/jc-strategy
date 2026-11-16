@@ -6,9 +6,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.backtest import evaluate
+from src.backtest import evaluate, race_day_count
 from src.csv_store import load_odds, load_results
 from src.hkjc_client import HKJCClient
+from src.monitor import plan_auto
 from src.odds_board import pivot_odds
 from src.odds_math import is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
 from src.telegram_notify import format_alert, should_alert
@@ -56,6 +57,10 @@ def test_backtest_on_sample():
     assert brown > 30
     names = {r["horse_name"] for r in odds}
     assert any(any("\u4e00" <= ch <= "\u9fff" for ch in name) for name in names)
+    days = race_day_count(odds)
+    assert days >= 1
+    assert stats["race_days"] == days
+    assert stats["triggers_per_race_day"] == round(stats["triggers"] / days, 2)
 
 
 def test_odds_board_one_row_per_horse():
@@ -283,6 +288,36 @@ def test_telegram_uses_own_checkpoint_odds_and_bet_label():
     assert "1.7" in text
 
 
+def test_plan_auto_uses_actual_post_times():
+    first = parse_hk("2026-11-18 12:45:00")
+    last = parse_hk("2026-11-18 17:15:00")
+    posts = [first, last]
+    far = plan_auto(parse_hk("2026-11-18 10:00:00"), posts, max_wait_minutes=45)
+    assert far.action == "defer"
+    assert far.wait_minutes > 45
+    near = plan_auto(parse_hk("2026-11-18 12:20:00"), posts, max_wait_minutes=45)
+    assert near.action == "monitor"
+    during = plan_auto(parse_hk("2026-11-18 13:00:00"), posts)
+    assert during.action == "monitor"
+    after = plan_auto(parse_hk("2026-11-18 18:00:00"), posts, trail_minutes=25)
+    assert after.action == "results"
+    unknown = plan_auto(parse_hk("2026-11-18 10:00:00"), [])
+    assert unknown.action == "monitor"
+    hv_first = parse_hk("2026-11-18 19:15:00")
+    hv = plan_auto(
+        parse_hk("2026-11-18 17:30:00"),
+        [hv_first, parse_hk("2026-11-18 23:10:00")],
+        max_wait_minutes=45,
+    )
+    assert hv.action == "defer"
+    hv_near = plan_auto(
+        parse_hk("2026-11-18 18:20:00"),
+        [hv_first, parse_hk("2026-11-18 23:10:00")],
+        max_wait_minutes=45,
+    )
+    assert hv_near.action == "monitor"
+
+
 if __name__ == "__main__":
     test_timezone_is_hong_kong()
     test_drop_and_brown_grid()
@@ -295,4 +330,5 @@ if __name__ == "__main__":
     test_place_and_win_place_use_official_dividends_not_win_odds()
     test_winplaodds_string_keeps_pools_apart()
     test_telegram_uses_own_checkpoint_odds_and_bet_label()
+    test_plan_auto_uses_actual_post_times()
     print("all tests ok")

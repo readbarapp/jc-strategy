@@ -400,8 +400,16 @@
     state.backtest = bt;
     const tone = bt.roi >= 0 ? "up" : "down";
     const whenLabel = ($("checkpoint").selectedOptions[0] && $("checkpoint").selectedOptions[0].text) || checkpoint;
+    const perDay = Number(bt.triggers_per_race_day || 0);
+    const raceDays = Number(bt.race_days || 0);
     $("bt-kpis").innerHTML = [
       kpi("t", "總觸發次數", bt.triggers, `${whenLabel} 啡格 ∩ 賠率範圍`),
+      kpi(
+        "f",
+        "策略頻率",
+        perDay.toFixed(1) + " 注／賽馬日",
+        `覆蓋 ${raceDays} 個賽馬日 · 總觸發 ÷ 樣本日數`
+      ),
       kpi("w", "策略勝率", bt.win_rate.toFixed(2) + "%", `${bt.hits} 次命中`),
       kpi("p", "平均命中派彩賠率", bt.avg_payout_odds.toFixed(2), "中獎注的 dividend / $10"),
       kpi("s", "總投入本金", "$" + bt.staked.toFixed(0), "每注 $10"),

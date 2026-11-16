@@ -50,6 +50,16 @@ def trigger_rows(
     return list(best.values())
 
 
+def race_day_count(rows: Iterable[dict]) -> int:
+    """Unique (race_date, venue) days in the odds/results sample — including days with 0 trades."""
+    keys = {
+        (str(r.get("race_date") or ""), str(r.get("venue") or ""))
+        for r in rows
+        if r.get("race_date")
+    }
+    return len(keys)
+
+
 def evaluate(
     odds: list[dict],
     results: list[dict],
@@ -106,6 +116,8 @@ def evaluate(
         sum(t["payout_odds"] for t in trades if t["hit"]) / hits if hits else 0.0
     )
     roi = (pnl / staked * 100.0) if staked else 0.0
+    race_days = race_day_count(odds)
+    per_day = (n / race_days) if race_days else 0.0
     return {
         "triggers": n,
         "hits": hits,
@@ -114,5 +126,7 @@ def evaluate(
         "staked": round(staked, 2),
         "pnl": round(pnl, 2),
         "roi": round(roi, 2),
+        "race_days": race_days,
+        "triggers_per_race_day": round(per_day, 2),
         "trades": trades,
     }
