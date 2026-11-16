@@ -179,9 +179,12 @@
     finals.sort((a, b) => a - b);
     mdds.sort((a, b) => a - b);
     const expectedFinal = finals.reduce((s, v) => s + v, 0) / sims;
+    const expectedPnl = expectedFinal - bank0;
     return {
-      expected_pnl: expectedFinal - bank0,
+      expected_pnl: expectedPnl,
+      expected_roi: bank0 ? (expectedPnl / bank0) * 100 : 0,
       expected_final: expectedFinal,
+      bankroll: bank0,
       mdd_median: percentile(mdds, 50),
       mdd_p95: percentile(mdds, 95),
       ruin: (ruin / sims) * 100,
