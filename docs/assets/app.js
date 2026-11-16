@@ -2,7 +2,7 @@
 (function () {
   const { formatHk, weekdayZh, parseCsv, toCsv, downloadBlob, detectRepo, saveRepo,
     loadRelativeOrRaw, ghPutFile, ghDispatch, ghLatestRun, num, isTrue } = window.HKJC;
-  const { evaluate, monteCarlo, pivotOdds, yearlyBets } = window.HKJCEngine;
+  const { evaluate, monteCarlo, pivotOdds, yearlyBets, triggers } = window.HKJCEngine;
 
   const ODDS_BOARD_COLS = [
     { key: "odds_t15", label: "開賽前15分鐘", brownKey: null },
@@ -118,6 +118,7 @@
       panel.classList.toggle("hidden", panel.getAttribute("data-panel") !== id);
     });
     if (id === "strategy" || id === "monte") runStrategy();
+    if (id === "data") renderDataTable();
     if (id === "status") refreshStatus();
     if (id === "guide") showGuide(state.guideKind || "user");
   }
@@ -282,6 +283,64 @@
     return lookup.get(horseKey(row)) || { any: false, t1: false };
   }
 
+  function strategyFilterOn() {
+    return !!( $("filter-strategy") && $("filter-strategy").checked );
+  }
+
+  function strategyParams() {
+    const minOdds = num($("min-odds") && $("min-odds").value, 3.5);
+    const maxOdds = num($("max-odds") && $("max-odds").value, 9.0);
+    return {
+      minOdds: Math.min(minOdds, maxOdds),
+      maxOdds: Math.max(minOdds, maxOdds),
+      checkpoint: ($("checkpoint") && $("checkpoint").value) || "T-1",
+      threshold: currentThreshold(),
+    };
+  }
+
+  function strategySettingLabel() {
+    const p = strategyParams();
+    const when =
+      ($("checkpoint") && $("checkpoint").selectedOptions[0] && $("checkpoint").selectedOptions[0].text) ||
+      p.checkpoint;
+    return `${when} · 獨贏 ${p.minOdds.toFixed(1)}–${p.maxOdds.toFixed(1)} · 跌幅 ≥ ${p.threshold}%`;
+  }
+
+  function strategyMatchKeys() {
+    const p = strategyParams();
+    return new Set(
+      triggers(state.odds, p.minOdds, p.maxOdds, p.threshold, p.checkpoint).map(horseKey)
+    );
+  }
+
+  function strategyLegendNote() {
+    if (!strategyFilterOn()) return "";
+    return (
+      `「只看符合策略」跟<strong class="text-gold-300">策略回測</strong>頁同一套揀馬：` +
+      `${strategySettingLabel()}。投注方法（獨贏／位置）唔影響顯示邊啲馬。`
+    );
+  }
+
+  function updateStrategyFilterHint() {
+    const hint = $("filter-strategy-hint");
+    if (hint) hint.textContent = "跟策略回測：" + strategySettingLabel();
+    const box = $("filter-strategy");
+    const label = box && box.closest("label");
+    if (label) {
+      label.classList.toggle("border-gold-500/80", strategyFilterOn());
+      label.classList.toggle("bg-gold-500/20", strategyFilterOn());
+    }
+  }
+
+  function refreshStrategyFilterTable() {
+    if (strategyFilterOn()) {
+      state.page = 1;
+      renderDataTable();
+      return;
+    }
+    updateStrategyFilterHint();
+  }
+
   function filteredRows() {
     const date = $("filter-date") ? $("filter-date").value : "";
     const venue = $("filter-venue") ? $("filter-venue").value : "";
@@ -289,8 +348,10 @@
     const horse = $("filter-horse") ? $("filter-horse").value.trim() : "";
     const brown = !!( $("filter-brown") && $("filter-brown").checked );
     const brownT1 = !!( $("filter-brown-t1") && $("filter-brown-t1").checked );
+    const strategyOnly = strategyFilterOn();
     const src = state.tableSource === "results" ? state.results : oddsBoard(state.tableSource);
     const lookup = brown || brownT1 ? winBrownLookup() : null;
+    const strategyKeys = strategyOnly ? strategyMatchKeys() : null;
     return src.filter((row) => {
       if (date && row.race_date !== date) return false;
       if (venue && String(row.venue).toUpperCase() !== venue.toUpperCase()) return false;
@@ -301,6 +362,7 @@
         if (brownT1 && !flags.t1) return false;
         if (brown && !brownT1 && !flags.any) return false;
       }
+      if (strategyOnly && !strategyKeys.has(horseKey(row))) return false;
       return true;
     });
   }
@@ -318,6 +380,7 @@
       toast(err.message || String(err), "error");
       return;
     }
+    updateStrategyFilterHint();
     const pageSize = 80;
     const pages = Math.max(1, Math.ceil(rows.length / pageSize));
     if (state.page > pages) state.page = pages;
@@ -326,10 +389,12 @@
       const brownOn = $("filter-brown").checked || ($("filter-brown-t1") && $("filter-brown-t1").checked);
       $("table-meta").textContent =
         `顯示 ${rows.length} / ${state.results.length} 列 · 第 ${state.page}/${pages} 頁` +
-        (brownOn ? " · 啡格 filter 用獨贏急跌對應同一隻馬" : "");
+        (brownOn ? " · 啡格 filter 用獨贏急跌對應同一隻馬" : "") +
+        (strategyFilterOn() ? ` · 符合策略 ${strategySettingLabel()}` : "");
       if ($("board-legend")) {
         $("board-legend").innerHTML =
-          "呢張表係<strong class=\"text-slate-300\">官方賽果派彩</strong>。上面「只看啡格／只看開賽1分鐘前出現啡格」同樣適用：用獨贏表嘅急跌（T-1 對 T-5）去篩選呢啲馬。";
+          "呢張表係<strong class=\"text-slate-300\">官方賽果派彩</strong>。上面「只看啡格／只看開賽1分鐘前出現啡格／只看符合策略」同樣適用：用獨贏表嘅急跌同策略回測設定去篩選呢啲馬。" +
+          (strategyLegendNote() ? " " + strategyLegendNote() : "");
       }
       const labels = {
         race_date: "日期",
@@ -346,7 +411,7 @@
         "<tr>" + RESULT_FIELDS.map((f) => `<th>${labels[f] || f}</th>`).join("") + "</tr>";
       if (!slice.length) {
         $("data-body").innerHTML =
-          `<tr><td colspan="${RESULT_FIELDS.length}" class="text-slate-500">呢個 filter 之下冇賽果。啡格係用獨贏急跌對同一隻馬（開賽前1分鐘 = T-1 對 T-5）。</td></tr>`;
+          `<tr><td colspan="${RESULT_FIELDS.length}" class="text-slate-500">呢個 filter 之下冇賽果。啡格用獨贏急跌對同一隻馬；符合策略跟策略回測頁嘅時間點、獨贏範圍同啡格門檻。</td></tr>`;
       } else {
         $("data-body").innerHTML = slice
           .map((row) => {
@@ -363,38 +428,48 @@
       }
     } else {
       const poolName = state.tableSource === "place" ? "位置賠率" : "獨贏賠率";
-      $("table-meta").textContent = `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 急跌格 = 較約 5 分鐘前（上一節點）跌 ≥ ${currentThreshold()}%`;
+      $("table-meta").textContent =
+        `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 急跌格 = 較約 5 分鐘前（上一節點）跌 ≥ ${currentThreshold()}%` +
+        (strategyFilterOn() ? ` · 符合策略 ${strategySettingLabel()}` : "");
       if ($("board-legend")) {
-        $("board-legend").innerHTML =
+        const base =
           state.tableSource === "place"
-            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。急跌格＝較上一個時間點（約 5 分鐘前）跌 ≥ 門檻，例如開賽前 1 分鐘同開賽前 5 分鐘比。冇開賽前 3 分鐘欄。"
+            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。急跌格＝較上一個時間點（約 5 分鐘前）跌 ≥ 門檻，例如開賽前 1 分鐘同開賽前 5 分鐘比。冇開賽前 3 分鐘欄。揀馬仍然用獨贏啡格。"
             : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。啡格＝較上一個時間點（約 5 分鐘前）跌 ≥ 門檻；開賽前 1 分鐘同開賽前 5 分鐘比。唔再抄開賽前 3 分鐘。";
+        const note = strategyLegendNote();
+        $("board-legend").innerHTML = note ? base + " " + note : base;
       }
+      const oddsColspan = 6 + ODDS_BOARD_COLS.length + 1;
       $("data-head").innerHTML = `<tr>
         <th>日期</th><th>場地</th><th>場次</th><th>開跑</th><th>馬號</th><th>馬名</th>
         ${ODDS_BOARD_COLS.map((c) => `<th>${c.label}</th>`).join("")}
         <th>啡格時間點</th>
       </tr>`;
-      $("data-body").innerHTML = slice
-        .map((row) => {
-          const cells = ODDS_BOARD_COLS.map((c) => {
-            const brown = c.brownKey && isTrue(row[c.brownKey]);
-            return `<td class="${brown ? "cell-brown" : ""}">${fmtOdds(row[c.key])}</td>`;
-          }).join("");
-          const flag = row.brown_at
-            ? `<td class="cell-brown">${row.brown_at}</td>`
-            : `<td>—</td>`;
-          return `<tr>
-            <td>${row.race_date}</td>
-            <td>${venueName(row.venue)}</td>
-            <td>${row.race_no}</td>
-            <td>${row.scheduled_time || "—"}</td>
-            <td>${row.horse_no}</td>
-            <td>${row.horse_name || "—"}</td>
-            ${cells}${flag}
-          </tr>`;
-        })
-        .join("");
+      if (!slice.length) {
+        $("data-body").innerHTML =
+          `<tr><td colspan="${oddsColspan}" class="text-slate-500">呢個 filter 之下冇馬。符合策略 = 策略回測頁揀嘅時間點出現獨贏啡格，而且嗰刻獨贏喺範圍內。</td></tr>`;
+      } else {
+        $("data-body").innerHTML = slice
+          .map((row) => {
+            const cells = ODDS_BOARD_COLS.map((c) => {
+              const brown = c.brownKey && isTrue(row[c.brownKey]);
+              return `<td class="${brown ? "cell-brown" : ""}">${fmtOdds(row[c.key])}</td>`;
+            }).join("");
+            const flag = row.brown_at
+              ? `<td class="cell-brown">${row.brown_at}</td>`
+              : `<td>—</td>`;
+            return `<tr>
+              <td>${row.race_date}</td>
+              <td>${venueName(row.venue)}</td>
+              <td>${row.race_no}</td>
+              <td>${row.scheduled_time || "—"}</td>
+              <td>${row.horse_no}</td>
+              <td>${row.horse_name || "—"}</td>
+              ${cells}${flag}
+            </tr>`;
+          })
+          .join("");
+      }
     }
     $("page-indicator").textContent = `${state.page} / ${pages}`;
   }
@@ -714,16 +789,24 @@
     $("min-odds").addEventListener("input", () => {
       $("min-odds-val").textContent = Number($("min-odds").value).toFixed(1);
       runStrategy();
+      refreshStrategyFilterTable();
     });
     $("max-odds").addEventListener("input", () => {
       $("max-odds-val").textContent = Number($("max-odds").value).toFixed(1);
       runStrategy();
+      refreshStrategyFilterTable();
     });
     ["bet-type", "checkpoint", "mc-bankroll", "mc-stake", "mc-days", "mc-sims"].forEach((id) => {
-      $(id).addEventListener("change", runStrategy);
-      $(id).addEventListener("input", runStrategy);
+      $(id).addEventListener("change", () => {
+        runStrategy();
+        if (id === "checkpoint" || id === "bet-type") refreshStrategyFilterTable();
+      });
+      $(id).addEventListener("input", () => {
+        runStrategy();
+        if (id === "checkpoint" || id === "bet-type") refreshStrategyFilterTable();
+      });
     });
-    ["filter-date", "filter-venue", "filter-race", "filter-horse", "filter-brown", "filter-brown-t1"].forEach((id) => {
+    ["filter-date", "filter-venue", "filter-race", "filter-horse", "filter-brown", "filter-brown-t1", "filter-strategy"].forEach((id) => {
       $(id).addEventListener("input", () => {
         state.page = 1;
         renderDataTable();
