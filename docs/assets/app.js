@@ -225,6 +225,31 @@
     if ([...select.options].some((o) => o.value === current)) select.value = current;
   }
 
+  function horseKey(row) {
+    return `${row.race_date}|${row.venue}|${row.race_no}|${row.horse_no}`;
+  }
+
+  function winBrownLookup() {
+    const map = new Map();
+    for (const row of oddsBoard("win")) {
+      map.set(horseKey(row), {
+        any: isTrue(row.is_brown_grid) || !!row.brown_at,
+        t1: isTrue(row.brown_t1),
+      });
+    }
+    return map;
+  }
+
+  function brownFlags(row, lookup) {
+    if (state.tableSource !== "results") {
+      return {
+        any: isTrue(row.is_brown_grid) || !!row.brown_at,
+        t1: isTrue(row.brown_t1),
+      };
+    }
+    return lookup.get(horseKey(row)) || { any: false, t1: false };
+  }
+
   function filteredRows() {
     const date = $("filter-date").value;
     const venue = $("filter-venue").value;
@@ -233,13 +258,17 @@
     const brown = $("filter-brown").checked;
     const brownT1 = $("filter-brown-t1") && $("filter-brown-t1").checked;
     const src = state.tableSource === "results" ? state.results : oddsBoard(state.tableSource);
+    const lookup = state.tableSource === "results" && (brown || brownT1) ? winBrownLookup() : null;
     return src.filter((row) => {
       if (date && row.race_date !== date) return false;
       if (venue && row.venue !== venue) return false;
       if (race && String(row.race_no) !== race) return false;
       if (horse && String(row.horse_no) !== horse) return false;
-      if (state.tableSource !== "results" && brownT1 && !isTrue(row.brown_t1)) return false;
-      if (brown && state.tableSource !== "results" && !brownT1 && !isTrue(row.is_brown_grid) && !row.brown_at) return false;
+      if (brownT1 || brown) {
+        const flags = brownFlags(row, lookup);
+        if (brownT1 && !flags.t1) return false;
+        if (brown && !brownT1 && !flags.any) return false;
+      }
       return true;
     });
   }
@@ -256,7 +285,14 @@
     if (state.page > pages) state.page = pages;
     const slice = rows.slice((state.page - 1) * pageSize, state.page * pageSize);
     if (state.tableSource === "results") {
-      $("table-meta").textContent = `顯示 ${rows.length} / ${state.results.length} 列 · 第 ${state.page}/${pages} 頁`;
+      const brownOn = $("filter-brown").checked || ($("filter-brown-t1") && $("filter-brown-t1").checked);
+      $("table-meta").textContent =
+        `顯示 ${rows.length} / ${state.results.length} 列 · 第 ${state.page}/${pages} 頁` +
+        (brownOn ? " · 啡格 filter 用獨贏急跌對應同一隻馬" : "");
+      if ($("board-legend")) {
+        $("board-legend").innerHTML =
+          "呢張表係<strong class=\"text-slate-300\">官方賽果派彩</strong>。上面「只看啡格／只看開賽1分鐘前出現啡格」同樣適用：用獨贏表嘅急跌（T-1 對 T-5）去篩選呢啲馬。";
+      }
       const labels = {
         race_date: "日期",
         venue: "場地",
