@@ -31,3 +31,6 @@ RESULTS_FIELDS = [
 ]
 
 VENUE_NAMES = {"ST": "沙田", "HV": "跑馬地"}
+
+# Display checkpoints: one column each on the odds board (one row per horse).
+DISPLAY_CHECKPOINTS = ["T-15", "T-10", "T-5", "T-3", "T-1", "T-0"]

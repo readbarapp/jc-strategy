@@ -6,6 +6,7 @@ import csv
 from pathlib import Path
 from typing import Iterable
 
+from .odds_board import WIDE_FIELDS, pivot_odds
 from .schema import ODDS_FIELDS, RESULTS_FIELDS
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -13,6 +14,7 @@ DATA_DIR = ROOT / "data"
 DOCS_DATA = ROOT / "docs" / "data"
 ODDS_PATH = DATA_DIR / "odds_snapshots.csv"
 RESULTS_PATH = DATA_DIR / "race_results.csv"
+BOARD_PATH = DATA_DIR / "odds_board.csv"
 
 
 def _ensure(path: Path, fields: list[str]) -> None:
@@ -73,8 +75,14 @@ def upsert(path: Path, fields: list[str], incoming: list[dict], key_fn) -> int:
     return added
 
 
+def rebuild_odds_board(threshold: float = 50.0) -> None:
+    write_rows(BOARD_PATH, WIDE_FIELDS, pivot_odds(load_odds(), threshold))
+
+
 def upsert_odds(rows: list[dict]) -> int:
-    return upsert(ODDS_PATH, ODDS_FIELDS, rows, _key_odds)
+    added = upsert(ODDS_PATH, ODDS_FIELDS, rows, _key_odds)
+    rebuild_odds_board()
+    return added
 
 
 def upsert_results(rows: list[dict]) -> int:
@@ -93,6 +101,7 @@ def copy_to_docs() -> None:
     """Mirror canonical CSVs into docs/ so GitHub Pages can read them."""
     mapping = [
         (ODDS_PATH, DOCS_DATA / "odds_snapshots.csv"),
+        (BOARD_PATH, DOCS_DATA / "odds_board.csv"),
         (RESULTS_PATH, DOCS_DATA / "race_results.csv"),
         (ROOT / "config.json", ROOT / "docs" / "config.json"),
         (ROOT / "status.json", ROOT / "docs" / "status.json"),

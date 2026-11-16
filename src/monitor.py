@@ -42,10 +42,14 @@ def snapshot_race(
     meeting: Meeting,
     race,
     runners,
-    last_odds: dict[tuple[int, int], float],
+    checkpoint_odds: dict[tuple[int, int], float],
     captured: set[tuple[int, int, str]],
     alerted: set[tuple[int, int]],
 ) -> list[dict]:
+    """Write one snapshot per official checkpoint.
+
+    啡格 is vs the previous checkpoint (e.g. T-1 vs T-3), not vs the last 10s tick.
+    """
     now = now_hk()
     post = HKJCClient.scheduled_datetime(meeting, race)
     if post:
@@ -54,7 +58,9 @@ def snapshot_race(
             minutes, cfg.get("data", {}).get("checkpoints_minutes") or [15, 10, 5, 3, 1, 0]
         )
     else:
-        checkpoint = "LIVE"
+        checkpoint = "T-0"
+    if not checkpoint:
+        return []
     threshold = brown_grid_threshold(cfg)
     scheduled = post.strftime("%H:%M:%S") if post else (race.post_time or "")
     capture_ts = format_hk(now)
@@ -63,30 +69,21 @@ def snapshot_race(
         win = parse_odds(runner.win_odds)
         pla = parse_odds(runner.place_odds)
         key = (race.race_no, runner.horse_no)
-        prev = last_odds.get(key)
-        drop = win_drop_pct(prev, win)
+        ck = (race.race_no, runner.horse_no, checkpoint)
+        if ck in captured:
+            continue
+        prev = checkpoint_odds.get(key)
+        drop = win_drop_pct(prev, win) if prev is not None else 0.0
         brown = is_brown_grid(drop, threshold)
         if win is not None:
-            last_odds[key] = win
-        cp = checkpoint
-        should_write = False
-        if cp:
-            ck = (race.race_no, runner.horse_no, cp)
-            if ck not in captured:
-                should_write = True
-                captured.add(ck)
-        if brown:
-            should_write = True
-            if not cp:
-                cp = "ALERT"
-        if not should_write:
-            continue
+            checkpoint_odds[key] = win
+        captured.add(ck)
         row = {
             "race_date": meeting.race_date,
             "venue": meeting.venue,
             "race_no": race.race_no,
             "scheduled_time": scheduled,
-            "checkpoint": cp or "ALERT",
+            "checkpoint": checkpoint,
             "capture_timestamp": capture_ts,
             "horse_no": runner.horse_no,
             "horse_name": runner.horse_name,
@@ -148,7 +145,7 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
         while now_hk() < first_watch:
             time.sleep(min(60, max(5, (first_watch - now_hk()).total_seconds())))
 
-    last_odds: dict[tuple[int, int], float] = {}
+    checkpoint_odds: dict[tuple[int, int], float] = {}
     captured: set[tuple[int, int, str]] = set()
     alerted: set[tuple[int, int]] = set()
     monitored: list[int] = []
@@ -183,7 +180,7 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
             if race.race_no not in monitored:
                 monitored.append(race.race_no)
             tick_rows.extend(
-                snapshot_race(cfg, meeting, race, runners, last_odds, captured, alerted)
+                snapshot_race(cfg, meeting, race, runners, checkpoint_odds, captured, alerted)
             )
             time.sleep(0.15)
 
@@ -232,13 +229,13 @@ def run_once(cfg: dict[str, Any] | None = None, race_date: str | None = None) ->
         write_status(state="idle", is_race_day=False, last_message="無賽事可抓取")
         gitops.persist_and_push()
         return "idle"
-    last_odds: dict[tuple[int, int], float] = {}
+    checkpoint_odds: dict[tuple[int, int], float] = {}
     captured: set[tuple[int, int, str]] = set()
     alerted: set[tuple[int, int]] = set()
     rows: list[dict] = []
     for race in meeting.races:
         runners = client.fetch_win_place_odds(meeting, race.race_no)
-        rows.extend(snapshot_race(cfg, meeting, race, runners, last_odds, captured, alerted))
+        rows.extend(snapshot_race(cfg, meeting, race, runners, checkpoint_odds, captured, alerted))
         time.sleep(0.2)
     if rows:
         csv_store.upsert_odds(rows)

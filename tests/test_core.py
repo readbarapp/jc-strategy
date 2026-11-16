@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.backtest import evaluate
 from src.csv_store import load_odds, load_results
+from src.odds_board import pivot_odds
 from src.odds_math import is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
 from src.timeutil import HK_TZ, format_hk, parse_hk
 
@@ -48,6 +49,18 @@ def test_backtest_on_sample():
     assert stats["staked"] == stats["triggers"] * 10
     brown = sum(1 for r in odds if str(r["is_brown_grid"]).lower() == "true")
     assert brown > 30
+    names = {r["horse_name"] for r in odds}
+    assert any(any("\u4e00" <= ch <= "\u9fff" for ch in name) for name in names)
+
+
+def test_odds_board_one_row_per_horse():
+    odds = load_odds()
+    board = pivot_odds(odds, 50)
+    keys = {(r["race_date"], r["venue"], str(r["race_no"]), str(r["horse_no"])) for r in odds}
+    assert len(board) == len(keys)
+    sample = next(r for r in board if r["is_brown_grid"] == "true")
+    assert sample["brown_at"]
+    assert sample["win_t15"] != "" or sample["win_t10"] != ""
 
 
 if __name__ == "__main__":
@@ -55,4 +68,5 @@ if __name__ == "__main__":
     test_drop_and_brown_grid()
     test_checkpoints()
     test_backtest_on_sample()
+    test_odds_board_one_row_per_horse()
     print("all tests ok")
