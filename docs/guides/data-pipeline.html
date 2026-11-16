@@ -148,7 +148,7 @@ scraper_runner.py auto
 <ol>
 <li>EV／ROI = 總盈虧 ÷ 總本金。</li>
 </ol>
-<p>蒙地卡羅：把歷史每注實際 PnL 有放回抽樣 1,000 條路徑，畫資金 P10–P90。</p>
+<p>蒙地卡羅：每年落注場次 = 策略頻率 × 一年賽馬日（預設 88）。模擬下注次數係隨機重抽幾多條一年路徑，每條用歷史每注實際 PnL 有放回抽樣，畫資金 P10–P90。</p>
 <hr />
 <h2>五、點樣 send alert</h2>
 <p>程式 <strong>唔經網站轉發</strong>。Actions 跑緊 <code>snapshot_race</code> 寫完一列，即刻喺同一進程呼叫 Telegram。</p>

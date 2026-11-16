@@ -125,13 +125,21 @@
     return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
   }
 
+  const DEFAULT_RACE_DAYS_PER_YEAR = 88;
+
+  function yearlyBets(triggersPerRaceDay, raceDaysPerYear) {
+    const days = Math.max(1, Math.floor(num(raceDaysPerYear, DEFAULT_RACE_DAYS_PER_YEAR)));
+    const freq = Number(triggersPerRaceDay) || 0;
+    return Math.max(0, Math.round(freq * days));
+  }
+
   function monteCarlo(trades, opts) {
     const pnls = trades.map((t) => t.pnl);
     if (!pnls.length) return null;
     const bank0 = num(opts.bankroll, 10000);
     const stake = num(opts.stake, 10);
     const races = Math.max(1, Math.floor(num(opts.races, 400)));
-    const sims = Math.max(50, Math.floor(num(opts.sims, 1000)));
+    const sims = Math.max(1, Math.floor(num(opts.sims, 1000)));
     const points = Math.min(80, races);
     const step = Math.max(1, Math.floor(races / points));
     const buckets = Array.from({ length: Math.floor((races - 1) / step) + 1 }, () => []);
@@ -257,5 +265,5 @@
     return wide;
   }
 
-  global.HKJCEngine = { evaluate, monteCarlo, triggers, pivotOdds, raceDayCount };
+  global.HKJCEngine = { evaluate, monteCarlo, triggers, pivotOdds, raceDayCount, yearlyBets };
 })(window);
