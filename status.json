@@ -1,6 +1,6 @@
 {
   "state": "idle",
-  "hk_time": "2026-11-18 22:55:36",
+  "hk_time": "2026-11-18 23:21:43",
   "is_race_day": true,
   "venue": "HV",
   "race_date": "2026-11-18",
@@ -15,9 +15,9 @@
     8,
     9
   ],
-  "last_sync": "2026-11-18 22:55:36",
-  "last_message": "監控結束，已嘗試寫入官方賽果",
+  "last_sync": "2026-11-18 23:21:43",
+  "last_message": "賽果寫入 8 列",
   "workflow": "hkjc_monitor",
   "error": "",
-  "updated_at": "2026-11-18T22:55:36+08:00"
+  "updated_at": "2026-11-18T23:21:43+08:00"
 }
