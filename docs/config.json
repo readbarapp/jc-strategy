@@ -31,15 +31,15 @@
     "initial_bankroll": 10000,
     "stake": 10,
     "race_days_per_year": 88,
-    "races_per_year": 323,
+    "races_per_year": 319,
     "simulations": 1000
   },
   "telegram": {
     "enabled": true,
     "chat_id": "",
     "bot_token": "",
-    "bet_type": "place",
-    "checkpoint": "T-5",
+    "bet_type": "win",
+    "checkpoint": "T-1",
     "min_odds": 3.5,
     "max_odds": 50,
     "min_drop_pct": 50
