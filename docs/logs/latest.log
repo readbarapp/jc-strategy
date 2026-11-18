@@ -101,3 +101,9 @@
 2026-11-18 16:50:15 HKT [INFO] scraper_runner command=auto date=2026-11-18 tz=Asia/Hong_Kong
 2026-11-18 16:50:16 HKT [INFO] Detected HK race day 2026-11-18 ST (9 races)
 2026-11-18 16:50:16 HKT [INFO] 偵測到 HV 賽馬日，第一場 2026-11-18 18:40，監控窗 2026-11-18 18:20 開始；距離仍有 90 分鐘，稍後排程再啟動
+2026-11-18 17:47:59 HKT [INFO] scraper_runner command=auto date=2026-11-18 tz=Asia/Hong_Kong
+2026-11-18 17:48:00 HKT [INFO] Detected HK race day 2026-11-18 ST (9 races)
+2026-11-18 17:48:00 HKT [INFO] Race day 2026-11-18 HV first post 2026-11-18 18:40 — start monitor
+2026-11-18 17:48:00 HKT [INFO] Detected HK race day 2026-11-18 ST (9 races)
+2026-11-18 17:48:00 HKT [INFO] Waiting until 2026-11-18 18:20:00 HKT before high-frequency capture
+2026-11-18 18:20:00 HKT [INFO] High-frequency monitor start 2026-11-18 HV interval=10s until 2026-11-18 23:15:00
