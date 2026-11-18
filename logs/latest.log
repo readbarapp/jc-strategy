@@ -281,3 +281,15 @@
 2026-11-18 22:49:31 HKT [INFO] Wrote 12 odds rows (races=[1, 2, 3, 4, 5, 6, 7, 8, 9])
 2026-11-18 22:50:46 HKT [INFO] Pushed data commit to main
 2026-11-18 22:52:53 HKT [INFO] Pushed data commit to main
+2026-11-18 22:55:00 HKT [INFO] Pushed data commit to main
+2026-11-18 22:55:21 HKT [INFO] All remaining races cancelled or resulted — stop odds loop
+2026-11-18 22:55:21 HKT [INFO] Odds loop finished — harvesting official results
+2026-11-18 22:55:23 HKT [INFO] Results R1: 12 runners
+2026-11-18 22:55:24 HKT [INFO] Results R2: 12 runners
+2026-11-18 22:55:26 HKT [INFO] Results R3: 12 runners
+2026-11-18 22:55:27 HKT [INFO] Results R4: 12 runners
+2026-11-18 22:55:29 HKT [INFO] Results R5: 12 runners
+2026-11-18 22:55:30 HKT [INFO] Results R6: 12 runners
+2026-11-18 22:55:34 HKT [INFO] Results R7: 12 runners
+2026-11-18 22:55:35 HKT [INFO] Results R8: 12 runners
+2026-11-18 22:55:36 HKT [INFO] Results R9: 4 runners
