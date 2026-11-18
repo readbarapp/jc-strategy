@@ -1,5 +1,5 @@
 {
-  "origin": "demo",
-  "note": "sample data from generate_sample_data.py; deleted automatically on first live HKJC capture",
-  "updated_at": "2026-11-16T15:50:00+08:00"
+  "origin": "live",
+  "note": "demo sample deleted after the first live HKJC capture",
+  "updated_at": "2026-11-18T18:24:19+08:00"
 }

@@ -107,3 +107,6 @@
 2026-11-18 17:48:00 HKT [INFO] Detected HK race day 2026-11-18 ST (9 races)
 2026-11-18 17:48:00 HKT [INFO] Waiting until 2026-11-18 18:20:00 HKT before high-frequency capture
 2026-11-18 18:20:00 HKT [INFO] High-frequency monitor start 2026-11-18 HV interval=10s until 2026-11-18 23:15:00
+2026-11-18 18:22:12 HKT [INFO] Pushed data commit to main
+2026-11-18 18:24:19 HKT [INFO] Purged demo sample CSVs — dashboard will only show live HKJC rows
+2026-11-18 18:24:19 HKT [INFO] Wrote 12 odds rows (races=[1, 2, 3, 4, 5, 6, 7, 8, 9])
