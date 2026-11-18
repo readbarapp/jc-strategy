@@ -38,8 +38,8 @@
     "enabled": true,
     "chat_id": "",
     "bot_token": "",
-    "bet_type": "win",
-    "checkpoint": "T-1",
+    "bet_type": "place",
+    "checkpoint": "T-5",
     "min_odds": 3.5,
     "max_odds": 50,
     "min_drop_pct": 50
