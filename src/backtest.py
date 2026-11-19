@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from .odds_math import official_brown, parse_odds
+from .odds_math import held_brown, parse_odds
 
 DEFAULT_RACE_DAYS_PER_YEAR = 88
 HKJC_TICKET_UNIT = 10.0  # official win/place dividends are per $10 ticket
@@ -26,8 +26,9 @@ def trigger_rows(
     max_odds: float,
     threshold: float,
     checkpoint: str = "T-1",
+    hold_need: float = 20.0,
 ) -> list[dict]:
-    """Bet only if 啡格 appears at the chosen checkpoint and that tick's odds are in range."""
+    """Bet only if held 啡格 appears at the chosen checkpoint and that tick's odds are in range."""
     wanted = (checkpoint or "T-1").strip().upper()
     if wanted.isdigit():
         wanted = f"T-{wanted}"
@@ -37,7 +38,14 @@ def trigger_rows(
             continue
         win = parse_odds(row.get("win_odds"))
         drop = float(row.get("win_drop_pct") or 0)
-        brown = official_brown(row.get("hkjc_grid"), drop, threshold, row.get("is_brown_grid"))
+        brown = held_brown(
+            row.get("hkjc_grid"),
+            drop,
+            threshold,
+            row.get("brown_hold_seconds"),
+            hold_need,
+            row.get("is_brown_grid"),
+        )
         if win is None or not brown:
             continue
         if not (min_odds <= win <= max_odds):
@@ -111,6 +119,7 @@ def evaluate(
     stake: float = 10.0,
     threshold: float = 50.0,
     checkpoint: str = "T-1",
+    hold_need: float = 20.0,
 ) -> dict:
     result_map = {
         (r["race_date"], r["venue"], str(r["race_no"]), str(r["horse_no"])): r
@@ -118,7 +127,7 @@ def evaluate(
     }
 
     trades = []
-    for trig in trigger_rows(odds, min_odds, max_odds, threshold, checkpoint):
+    for trig in trigger_rows(odds, min_odds, max_odds, threshold, checkpoint, hold_need):
         key = (trig["race_date"], trig["venue"], str(trig["race_no"]), str(trig["horse_no"]))
         res = result_map.get(key)
         if not res:

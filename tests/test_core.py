@@ -20,6 +20,8 @@ from src.race_events import (
 )
 from src.odds_board import pivot_odds
 from src.odds_math import (
+    brown_hold_seconds,
+    held_brown,
     is_brown_grid,
     match_checkpoint,
     official_brown,
@@ -54,6 +56,23 @@ def test_drop_and_brown_grid():
     assert official_brown("red", 80, 50) is False
     assert official_brown("", 50, 50) is True
     assert official_brown("", 40, 50) is False
+    flash = [
+        {"ts": "2026-11-18 19:38:50", "minutes": 1.2, "win_grid": "none"},
+        {"ts": "2026-11-18 19:39:00", "minutes": 1.0, "win_grid": "brown"},
+        {"ts": "2026-11-18 19:39:10", "minutes": 0.83, "win_grid": "none"},
+    ]
+    held = [
+        {"ts": "2026-11-18 19:38:30", "minutes": 1.5, "win_grid": "brown"},
+        {"ts": "2026-11-18 19:38:40", "minutes": 1.33, "win_grid": "brown"},
+        {"ts": "2026-11-18 19:38:50", "minutes": 1.16, "win_grid": "brown"},
+        {"ts": "2026-11-18 19:39:00", "minutes": 1.0, "win_grid": "brown"},
+    ]
+    assert brown_hold_seconds(flash, flash[1]) == 0.0
+    assert brown_hold_seconds(held, held[-1]) == 30.0
+    assert held_brown("brown", 10, 50, 0, 20) is False
+    assert held_brown("brown", 10, 50, 30, 20) is True
+    assert held_brown("brown", 10, 50, None, 20) is True
+    assert held_brown("", 55, 50, 0, 20, "true") is True
 
 
 def test_checkpoints():
@@ -392,6 +411,8 @@ def test_official_grid_beats_assumed_drop():
     assert "T-1" in board[0]["brown_at"]
     hits = trigger_rows(rows, 3.5, 9.0, 50, "T-1")
     assert len(hits) == 1
+    assert trigger_rows([{**rows[1], "brown_hold_seconds": 0}], 3.5, 9.0, 50, "T-1") == []
+    assert len(trigger_rows([{**rows[1], "brown_hold_seconds": 30}], 3.5, 9.0, 50, "T-1")) == 1
     rows[1]["hkjc_grid"] = "none"
     assert trigger_rows(rows, 3.5, 9.0, 50, "T-1") == []
 
@@ -431,6 +452,8 @@ def test_telegram_uses_own_checkpoint_odds_and_bet_label():
     assert should_alert(cfg, miss_odds) is False
     assert should_alert(cfg, dict(hit, hkjc_grid="none")) is False
     assert should_alert(cfg, dict(hit, hkjc_grid="brown", win_drop_pct=5)) is True
+    assert should_alert(cfg, dict(hit, hkjc_grid="brown", brown_hold_seconds=0, is_brown_grid="false")) is False
+    assert should_alert(cfg, dict(hit, hkjc_grid="brown", brown_hold_seconds=30, win_drop_pct=5)) is True
     text = format_alert(cfg, hit)
     assert "只買位置" in text
     assert "T-1" in text

@@ -33,7 +33,7 @@
   const ODDS_SNAPSHOT_FIELDS = [
     "race_date", "venue", "race_no", "scheduled_time", "checkpoint", "capture_timestamp",
     "minutes_to_post", "horse_no", "horse_name", "win_odds", "place_odds", "prev_win_odds",
-    "win_drop_pct", "is_brown_grid", "hkjc_grid", "place_grid",
+    "win_drop_pct", "is_brown_grid", "hkjc_grid", "place_grid", "brown_hold_seconds",
   ];
 
   const state = {
@@ -50,6 +50,7 @@
     tableSource: "win",
     guideKind: "user",
     chart: null,
+    pathChart: null,
     backtest: null,
     mc: null,
     dataOrigin: "demo",
@@ -78,6 +79,10 @@
 
   function currentThreshold() {
     return num($("brown-threshold") && $("brown-threshold").value, 50);
+  }
+
+  function currentHoldNeed() {
+    return num($("brown-hold") && $("brown-hold").value, 20);
   }
 
   function oddsBoard(pool) {
@@ -184,6 +189,7 @@
     if (!state.github.repo && gh.repo) state.github.repo = gh.repo;
     $("brown-threshold").value = d.brown_grid_drop_pct ?? 50;
     $("brown-threshold-val").textContent = `${$("brown-threshold").value}%`;
+    if ($("brown-hold")) $("brown-hold").value = d.brown_hold_seconds ?? 20;
     $("scrape-interval").value = d.scrape_interval_seconds ?? 10;
     $("min-odds").value = s.min_odds ?? 3.5;
     $("max-odds").value = s.max_odds ?? 9.0;
@@ -305,6 +311,7 @@
       maxOdds: Math.max(minOdds, maxOdds),
       checkpoint: ($("checkpoint") && $("checkpoint").value) || "T-1",
       threshold: currentThreshold(),
+      holdNeed: currentHoldNeed(),
     };
   }
 
@@ -313,13 +320,14 @@
     const when =
       ($("checkpoint") && $("checkpoint").selectedOptions[0] && $("checkpoint").selectedOptions[0].text) ||
       p.checkpoint;
-    return `${when} · 獨贏 ${p.minOdds.toFixed(1)}–${p.maxOdds.toFixed(1)} · 馬會啡格`;
+    const hold = p.holdNeed > 0 ? `持續 ≥ ${p.holdNeed}s` : "當刻啡格";
+    return `${when} · 獨贏 ${p.minOdds.toFixed(1)}–${p.maxOdds.toFixed(1)} · 馬會啡格 ${hold}`;
   }
 
   function strategyMatchKeys() {
     const p = strategyParams();
     return new Set(
-      triggers(state.odds, p.minOdds, p.maxOdds, p.threshold, p.checkpoint).map(horseKey)
+      triggers(state.odds, p.minOdds, p.maxOdds, p.threshold, p.checkpoint, p.holdNeed).map(horseKey)
     );
   }
 
@@ -441,6 +449,10 @@
     const key = state.inspect;
     if (!key) {
       box.classList.add("hidden");
+      if (state.pathChart) {
+        state.pathChart.destroy();
+        state.pathChart = null;
+      }
       return;
     }
     box.classList.remove("hidden");
@@ -471,6 +483,9 @@
         if (!row) return `<tr><td>${cp}</td><td colspan="5" class="text-slate-500">未抄到</td></tr>`;
         return `<tr><td>${cp}</td><td class="${gridCellClass(row.hkjc_grid)}">${fmtOdds(row.win_odds)}</td><td class="${gridCellClass(row.hkjc_grid)}">${gridLabel(row.hkjc_grid)}</td><td>${fmtOdds(row.place_odds)}</td><td class="mono">${row.capture_timestamp || "—"}</td><td class="mono">${row.minutes_to_post || "—"}</td></tr>`;
       }).join("") + "</tbody></table>";
+    const holdEl = $("horse-audit-hold");
+    if (holdEl) holdEl.textContent = holdSummary(byCp["T-1"]);
+    drawHorsePath(ticks, byCp);
     if (!ticks.length) {
       $("horse-audit-ticks").innerHTML = `<p class="text-[11px] text-slate-500">呢日未有 10 秒走勢（舊數據只得 5 個時間點）。下一個賽日起會開始存，你就唔使盯盤。</p>`;
     } else {
@@ -481,6 +496,131 @@
         last.map((row) => `<tr><td class="mono">${row.capture_timestamp}</td><td class="mono">${row.minutes_to_post}</td><td class="${gridCellClass(row.hkjc_grid)}">${fmtOdds(row.win_odds)}</td><td class="${gridCellClass(row.hkjc_grid)}">${gridLabel(row.hkjc_grid)}</td><td>${fmtOdds(row.place_odds)}</td></tr>`).join("") +
         "</tbody></table>";
     }
+  }
+
+  function gridStroke(grid) {
+    if (grid === "brown") return "#d97706";
+    if (grid === "red") return "#f87171";
+    if (grid === "green") return "#4ade80";
+    return "#e4c36a";
+  }
+
+  function holdSummary(t1) {
+    const need = currentHoldNeed();
+    if (!t1) return "未有開賽前 1 分鐘紀錄。通知／策略只睇你揀嘅時間點當刻格色，再加連續秒數。";
+    const grid = window.HKJCEngine.parseHkjcGrid(t1.hkjc_grid);
+    const hold = num(t1.brown_hold_seconds, NaN);
+    const heldTxt = Number.isFinite(hold) ? `連續 ${hold} 秒` : "舊數據冇 10 秒路徑，唔知持續幾耐";
+    if (grid === "brown") {
+      if (!Number.isFinite(hold)) return `開賽前 1 分鐘投注盤顯示啡格（${heldTxt}）。`;
+      if (need <= 0 || hold >= need) return `開賽前 1 分鐘投注盤顯示啡格，${heldTxt}（門檻 ${need}s）→ 會當訊號。`;
+      return `開賽前 1 分鐘投注盤顯示啡格，但只係 ${heldTxt}（門檻 ${need}s）→ 當閃過，唔發通知。`;
+    }
+    if (grid === "red") return "開賽前 1 分鐘投注盤顯示紅格。紅格唔當啡格訊號。";
+    if (grid === "green") return "開賽前 1 分鐘投注盤顯示綠格。綠格唔當啡格訊號。";
+    return "開賽前 1 分鐘投注盤冇啡格。之前閃過啡格都唔會通知，除非你揀嘅時間點當刻仍然係啡格而且夠持續。";
+  }
+
+  function drawHorsePath(ticks, byCp) {
+    const wrap = $("horse-audit-chart-wrap");
+    const canvas = $("horse-audit-chart");
+    if (!wrap || !canvas || typeof Chart === "undefined") return;
+    const tickPts = (ticks || [])
+      .map((row) => ({
+        x: num(row.minutes_to_post, NaN),
+        y: num(row.win_odds, NaN),
+        grid: window.HKJCEngine.parseHkjcGrid(row.hkjc_grid),
+      }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+      .sort((a, b) => b.x - a.x);
+    const cpMap = { "T-15": 15, "T-10": 10, "T-5": 5, "T-1": 1, "T-0": 0 };
+    const cpPts = Object.keys(cpMap)
+      .map((cp) => {
+        const row = byCp[cp];
+        if (!row) return null;
+        const y = num(row.win_odds, NaN);
+        if (!Number.isFinite(y)) return null;
+        return { x: cpMap[cp], y, grid: window.HKJCEngine.parseHkjcGrid(row.hkjc_grid), label: cp };
+      })
+      .filter(Boolean);
+    const series = tickPts.length ? tickPts : cpPts;
+    if (!series.length) {
+      wrap.classList.add("hidden");
+      if (state.pathChart) {
+        state.pathChart.destroy();
+        state.pathChart = null;
+      }
+      return;
+    }
+    wrap.classList.remove("hidden");
+    if (state.pathChart) state.pathChart.destroy();
+    state.pathChart = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: {
+        datasets: [
+          {
+            label: tickPts.length ? "獨贏（10 秒）" : "獨贏（時間點）",
+            data: series,
+            parsing: false,
+            borderColor: "rgba(228,195,106,0.85)",
+            backgroundColor: "transparent",
+            tension: 0.2,
+            pointRadius: tickPts.length ? 3 : 5,
+            pointHoverRadius: 6,
+            pointBackgroundColor: series.map((p) => gridStroke(p.grid)),
+            pointBorderColor: series.map((p) => gridStroke(p.grid)),
+            borderWidth: 2,
+          },
+          {
+            label: "時間點",
+            data: cpPts,
+            parsing: false,
+            showLine: false,
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            pointBackgroundColor: cpPts.map((p) => gridStroke(p.grid)),
+            pointBorderColor: "#0b1220",
+            pointBorderWidth: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "nearest", intersect: false },
+        plugins: {
+          legend: { labels: { color: "#94a3b8", boxWidth: 12 } },
+          tooltip: {
+            callbacks: {
+              title: (items) => {
+                const p = items[0] && items[0].raw;
+                if (!p) return "";
+                return (p.label ? p.label + " · " : "") + "開跑前 " + Number(p.x).toFixed(2) + " 分鐘";
+              },
+              label: (item) => {
+                const p = item.raw || {};
+                const g = p.grid === "brown" ? "啡格" : p.grid === "red" ? "紅格" : p.grid === "green" ? "綠格" : "無色";
+                return "獨贏 " + Number(p.y).toFixed(1) + " · " + g;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: "linear",
+            reverse: true,
+            title: { display: true, text: "距開跑（分鐘）", color: "#94a3b8" },
+            ticks: { color: "#94a3b8" },
+            grid: { color: "rgba(255,255,255,0.06)" },
+          },
+          y: {
+            title: { display: true, text: "獨贏賠率", color: "#94a3b8" },
+            ticks: { color: "#94a3b8" },
+            grid: { color: "rgba(255,255,255,0.06)" },
+          },
+        },
+      },
+    });
   }
 
   function inspectHorse(row) {
@@ -678,6 +818,7 @@
       checkpoint,
       stake: 10,
       threshold: currentThreshold(),
+      holdNeed: currentHoldNeed(),
     });
     state.backtest = bt;
     const tone = bt.roi >= 0 ? "up" : "down";
@@ -841,6 +982,7 @@
     cfg.telegram = cfg.telegram || {};
     cfg.github = cfg.github || {};
     cfg.data.brown_grid_drop_pct = num($("brown-threshold").value, 50);
+    cfg.data.brown_hold_seconds = num($("brown-hold") && $("brown-hold").value, 20);
     cfg.data.scrape_interval_seconds = num($("scrape-interval").value, 10);
     cfg.strategy.min_odds = num($("min-odds").value, 3.5);
     cfg.strategy.max_odds = num($("max-odds").value, 9.0);
@@ -1004,6 +1146,13 @@
       renderDataTable();
       runStrategy();
     });
+    if ($("brown-hold")) {
+      $("brown-hold").addEventListener("input", () => {
+        renderDataTable();
+        renderHorseAudit();
+        runStrategy();
+      });
+    }
     $("min-odds").addEventListener("input", () => {
       $("min-odds-val").textContent = Number($("min-odds").value).toFixed(1);
       runStrategy();

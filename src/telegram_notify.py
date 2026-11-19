@@ -8,7 +8,7 @@ from typing import Any
 import requests
 
 from .logger import log, log_exception
-from .odds_math import official_brown, parse_odds
+from .odds_math import held_brown, parse_odds
 from .schema import VENUE_NAMES
 from .timeutil import format_hk, now_hk, weekday_zh
 
@@ -97,7 +97,15 @@ def should_alert(cfg: dict[str, Any], row: dict[str, Any]) -> bool:
         if tg.get("min_drop_pct") not in (None, "")
         else (cfg.get("data") or {}).get("brown_grid_drop_pct", 50)
     )
-    if not official_brown(row.get("hkjc_grid"), drop, threshold, row.get("is_brown_grid")):
+    hold_need = float((cfg.get("data") or {}).get("brown_hold_seconds", 20) or 0)
+    if not held_brown(
+        row.get("hkjc_grid"),
+        drop,
+        threshold,
+        row.get("brown_hold_seconds"),
+        hold_need,
+        row.get("is_brown_grid"),
+    ):
         return False
     lo = float(tg.get("min_odds", 3.5))
     hi = float(tg.get("max_odds", 9.0))
@@ -117,6 +125,8 @@ def format_alert(cfg: dict[str, Any], row: dict[str, Any]) -> str:
     except Exception:
         wd = ""
     bet = BET_LABELS.get(str((cfg.get("telegram") or {}).get("bet_type") or "win"), "只買獨贏")
+    hold = row.get("brown_hold_seconds")
+    hold_txt = "" if hold in (None, "") else f" · 啡格持續 {html.escape(str(hold))}s"
     return (
         f"🚨 <b>落飛警報</b> · 🟤 啡格\n\n"
         f"📅 {html.escape(str(race_date))}（{wd}）{html.escape(str(venue))}\n"
@@ -124,7 +134,7 @@ def format_alert(cfg: dict[str, Any], row: dict[str, Any]) -> str:
         f"  開跑 {html.escape(str(row.get('scheduled_time') or '—'))}\n"
         f"🐴 {html.escape(str(row.get('horse_no')))}. {name}\n"
         f"📉 獨贏 {html.escape(str(prev))} → <b>{html.escape(str(win))}</b>"
-        f"  ({html.escape(str(drop))}%)\n"
+        f"  ({html.escape(str(drop))}%){hold_txt}\n"
         f"📍 位置 {html.escape(str(pla))}\n"
         f"🎯 {html.escape(bet)} · {html.escape(str(row.get('checkpoint')))}\n"
         f"⏰ {html.escape(str(row.get('capture_timestamp')))} HKT"
