@@ -18,7 +18,7 @@
 
 1. 全日每隔大約半個鐘問馬會：「今日沙田或者跑馬地有冇賽馬？第一場幾點開跑？」冇就收工。有就跟當日官方第一場時間倒數，唔係寫死 11:00／17:30。
 2. 有賽事就喺開跑前 15、10、5、1 分鐘同開跑嗰下，**分開**抄低每隻馬嘅獨贏（WIN）同位置（PLA）賠率。兩個彩池兩個數字，唔會撈亂。唔再抄開賽前 3 分鐘。
-3. 如果呢個鐘點嘅獨贏比起上一個鐘點（大約 5 分鐘前，例如 T-1 對 T-5）平咗一半或以上，就標「啡格」。位置表用位置賠率自己計急跌，但策略／Telegram 預設仍然用獨贏啡格做訊號。
+3. 紅／綠／啡格直接抄投注盤官方顏色（getJSON `馬號=賠率=標記`：1 紅、2 綠、3 啡）。馬會顯示為啡格先標啡格，唔再假設跌一半就係啡格。舊數據未有官方格色先用跌幅門檻。策略／Telegram 仍然用獨贏啡格做訊號。
 4. 賽事完咗再抄官方名次、獨贏派彩、位置派彩。回測「只買位置」用官方位置派彩，唔係用獨贏去估。
 5. 網站而家見到嘅舊日子多數係示範用嘅假數據（欄位同真 crawl 一樣）；真賽日同一套程式寫入真實 WIN／PLA。
 
@@ -145,7 +145,7 @@ GitHub Pages 本身是靜態的。要從瀏覽器改 repo 檔案或觸發 Action
 - 位置表只顯示馬會 **PLA** 彩池
 - 長表 `odds_snapshots.csv` 仍然一列同時有 `win_odds`、`place_odds` 兩欄（方便監控寫入），但前端唔會把兩個數字撈成一欄
 
-**啡格（獨贏表）**：該時間點的獨贏較 **上一個時間點（大約 5 分鐘前）** 下跌 ≥ 門檻（預設 50%）。例如開賽前 1 分鐘比 5 分鐘低 50%，T-1 格會標啡色。唔再抄開賽前 3 分鐘。位置表用同樣方法睇位置急跌，但策略／Telegram 訊號預設仍然用獨贏啡格。
+**啡格（獨贏表）**：跟投注盤官方顏色。紅格、綠格、啡格原色顯示；策略／Telegram 只認獨贏啡格。舊數據未有 `hkjc_grid` 先用跌幅門檻（預設 50%）。唔再抄開賽前 3 分鐘。
 
 ### 馬會賠率點樣拎（真賽日同一條路，唔係亂填）
 
@@ -157,16 +157,12 @@ GitHub Pages 本身是靜態的。要從瀏覽器改 repo 檔案或觸發 Action
 2. **中文馬名**  
    同一條 GraphQL 的 `runners.name_ch`。冇中文先用英文。
 
-3. **獨贏 + 位置（主通道）**  
-   再 POST 同一 GraphQL，變數 `oddsTypes: [WIN, PLA]`、`raceNo`。回覆有多個 `pmPools`：
-   - `oddsType == "WIN"` → 每個 `oddsNodes.combString`（馬號）的 `oddsValue` 寫入 `win_odds`
-   - `oddsType == "PLA"` → 同樣用馬號寫入 `place_odds`
-   - 其他彩池（QIN 等）直接跳過，唔會誤寫入位置欄
-   - 兩個 map 都空 → 當 GraphQL 失敗，改走後備，唔會用空白當真實賠率
-
-4. **後備 JSON**  
+3. **獨贏 + 位置 + 格色（主通道：投注盤）**  
    `https://bet.hkjc.com/racing/getJSON.aspx?type=winplaodds&date=年-月-日&venue=ST或HV&start=場次&end=場次`  
-   `OUT` 字串用 `#` 切開：前半 `WIN;馬號=賠率=…`，後半 `PLA;馬號=賠率=…`。兩邊分開 parse，再對馬號合併成同一 runner 的兩欄。
+   `OUT` 字串用 `#` 切開：前半 `WIN;馬號=賠率=標記`，後半 `PLA;…`。標記 `0` 無色、`1` 紅格、`2` 綠格、`3` 啡格。
+
+4. **後備 GraphQL**  
+   POST `info.cld.hkjc.com/graphql/base/`，變數 `oddsTypes: [WIN, PLA]`。`oddsValue` 寫賠率，`oddsDropValue`／`hotFavourite` 寫格色。兩個 map 都空先當失敗。
 
 5. **示範數據**  
    `scripts/generate_sample_data.py` 只係填滿表格用。Actions 真賽日跑 `scraper_runner.py auto`，**唔會**呼叫呢個產生器。
@@ -176,12 +172,13 @@ GitHub Pages 本身是靜態的。要從瀏覽器改 repo 檔案或觸發 Action
 
 ### `data/odds_snapshots.csv`
 
-監控寫入的長表：`race_date, venue, race_no, scheduled_time, checkpoint, capture_timestamp, horse_no, horse_name, win_odds, place_odds, prev_win_odds, win_drop_pct, is_brown_grid`
+監控寫入的長表：`race_date, venue, race_no, scheduled_time, checkpoint, capture_timestamp, horse_no, horse_name, win_odds, place_odds, prev_win_odds, win_drop_pct, is_brown_grid, hkjc_grid, place_grid`
 
 - `checkpoint`：`T-15` `T-10` `T-5` `T-1` `T-0`（唔再寫 `T-3`）
 - `win_odds` / `place_odds`：同一時間點兩個獨立彩池
-- `prev_win_odds` / `win_drop_pct`：相對 **上一個 checkpoint 的獨贏**（T-1 對 T-5，大約 5 分鐘；不是 10 秒一跳）
-- `is_brown_grid`：該 checkpoint 獨贏跌幅 ≥ 門檻
+- `hkjc_grid` / `place_grid`：投注盤官方顏色 `none` / `red` / `green` / `brown`
+- `prev_win_odds` / `win_drop_pct`：相對 **上一個 checkpoint 的獨贏**（只係參考；唔再用嚟定義啡格）
+- `is_brown_grid`：馬會顯示獨贏啡格（舊數據先用跌幅門檻）
 
 ### `data/win_board.csv` / `data/place_board.csv`
 
@@ -216,7 +213,7 @@ python scraper_runner.py test-telegram   # 需環境變數 TELEGRAM_BOT_TOKEN
 回測規則（同網頁可以改）：
 
 1. 只睇你揀嘅時間點（預設 **開賽前 1 分鐘**）
-2. 嗰一刻要係**獨贏啡格**（獨贏比起上一個時間點跌 ≥ 門檻，預設 50%；T-1 同 T-5 比）
+2. 嗰一刻要係**獨贏啡格**（馬會投注盤官方啡格；舊數據未有格色先用跌幅門檻）
 3. 嗰一刻**獨贏**要喺你設定嘅賠率範圍（例如 3.5–9.0）
 4. 投注方法：只買獨贏 / 只買位置 / 獨贏+位置，每注 $10
 

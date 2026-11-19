@@ -12,7 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .logger import log, log_exception
-from .odds_math import parse_odds
+from .odds_math import parse_hkjc_grid, parse_odds
 from .timeutil import combine_hk, parse_hk, today_hk, to_hk
 
 GRAPHQL_URL = "https://info.cld.hkjc.com/graphql/base/"
@@ -391,6 +391,8 @@ class RunnerOdds:
     win_odds: float | None
     place_odds: float | None
     status: str = "declared"
+    win_grid: str = ""
+    place_grid: str = ""
 
 
 @dataclass
@@ -631,10 +633,53 @@ class HKJCClient:
         return Meeting(race_date=race_date, venue=venue, races=races)
 
     def fetch_win_place_odds(self, meeting: Meeting, race_no: int) -> list[RunnerOdds]:
-        runners = self._odds_graphql(meeting, race_no)
+        # Betting-site getJSON is the live WIN/PLA board (including 紅/綠/啡格).
+        # GraphQL is the same public feed the app uses, but we keep it as fallback
+        # because commenters and our own captures saw it lag the tote board.
+        runners = self._odds_json(meeting, race_no)
         if runners:
             return runners
-        return self._odds_json(meeting, race_no)
+        return self._odds_graphql(meeting, race_no)
+
+    def _runners_from_maps(
+        self,
+        meeting: Meeting,
+        race_no: int,
+        win_map: dict[int, float | None],
+        pla_map: dict[int, float | None],
+        win_grid: dict[int, str],
+        pla_grid: dict[int, str],
+    ) -> list[RunnerOdds]:
+        if not win_map and not pla_map:
+            return []
+        race = meeting.race(race_no)
+        names = race.runners if race else {}
+        statuses = race.runner_status if race else {}
+        numbers = sorted(set(win_map) | set(pla_map) | set(names))
+        return [
+            RunnerOdds(
+                horse_no=n,
+                horse_name=names.get(n) or f"第{n}號",
+                win_odds=win_map.get(n),
+                place_odds=pla_map.get(n),
+                status=statuses.get(n) or "declared",
+                win_grid=win_grid.get(n, ""),
+                place_grid=pla_grid.get(n, ""),
+            )
+            for n in numbers
+        ]
+
+    @staticmethod
+    def _grid_from_odds_node(node: dict) -> str:
+        grid = parse_hkjc_grid(node.get("oddsDropValue"))
+        hot = node.get("hotFavourite") in (True, "true", "True", 1, "1")
+        if grid == "brown":
+            return "brown"
+        if grid == "green":
+            return "green"
+        if grid == "red" or hot:
+            return "red"
+        return grid
 
     def _odds_graphql(self, meeting: Meeting, race_no: int) -> list[RunnerOdds]:
         data = self._graphql(
@@ -652,35 +697,24 @@ class HKJCClient:
         pools = meetings[0].get("pmPools") or []
         win_map: dict[int, float | None] = {}
         pla_map: dict[int, float | None] = {}
+        win_grid: dict[int, str] = {}
+        pla_grid: dict[int, str] = {}
         for pool in pools:
             odds_type = str(pool.get("oddsType") or "").upper()
             if odds_type == "WIN":
-                target = win_map
+                target, grids = win_map, win_grid
             elif odds_type == "PLA":
-                target = pla_map
+                target, grids = pla_map, pla_grid
             else:
                 continue
             for node in pool.get("oddsNodes") or []:
                 comb = str(node.get("combString") or "").strip()
                 if not re.fullmatch(r"\d{1,2}", comb):
                     continue
-                target[int(comb)] = parse_odds(node.get("oddsValue"))
-        if not win_map and not pla_map:
-            return []
-        race = meeting.race(race_no)
-        names = race.runners if race else {}
-        statuses = race.runner_status if race else {}
-        numbers = sorted(set(win_map) | set(pla_map) | set(names))
-        return [
-            RunnerOdds(
-                horse_no=n,
-                horse_name=names.get(n) or f"第{n}號",
-                win_odds=win_map.get(n),
-                place_odds=pla_map.get(n),
-                status=statuses.get(n) or "declared",
-            )
-            for n in numbers
-        ]
+                horse_no = int(comb)
+                target[horse_no] = parse_odds(node.get("oddsValue"))
+                grids[horse_no] = self._grid_from_odds_node(node)
+        return self._runners_from_maps(meeting, race_no, win_map, pla_map, win_grid, pla_grid)
 
     def _odds_json(self, meeting: Meeting, race_no: int) -> list[RunnerOdds]:
         params = {
@@ -703,28 +737,22 @@ class HKJCClient:
             return []
         win_map: dict[int, float | None] = {}
         pla_map: dict[int, float | None] = {}
+        win_grid: dict[int, str] = {}
+        pla_grid: dict[int, str] = {}
         text = str(raw)
+        text = re.sub(r"^\d{6}@@@", "", text)
         win_part, _, pla_part = text.partition("#")
-        self._parse_pool_segment(win_part, win_map)
-        self._parse_pool_segment(pla_part, pla_map)
-        race = meeting.race(race_no)
-        names = race.runners if race else {}
-        statuses = race.runner_status if race else {}
-        numbers = sorted(set(win_map) | set(pla_map) | set(names))
-        return [
-            RunnerOdds(
-                horse_no=n,
-                horse_name=names.get(n) or f"第{n}號",
-                win_odds=win_map.get(n),
-                place_odds=pla_map.get(n),
-                status=statuses.get(n) or "declared",
-            )
-            for n in numbers
-        ]
+        self._parse_pool_segment(win_part, win_map, win_grid)
+        self._parse_pool_segment(pla_part, pla_map, pla_grid)
+        return self._runners_from_maps(meeting, race_no, win_map, pla_map, win_grid, pla_grid)
 
     @staticmethod
-    def _parse_pool_segment(segment: str, target: dict[int, float | None]) -> None:
-        # WIN;1=3.5=0;2=12=1  or  1=3.5=0;2=12=1
+    def _parse_pool_segment(
+        segment: str,
+        target: dict[int, float | None],
+        grids: dict[int, str] | None = None,
+    ) -> None:
+        # WIN;1=3.5=0;2=12=1;14=3.4=3  — third field is official 0/1紅/2綠/3啡
         body = segment.split(";", 1)[-1] if ";" in segment else segment
         for token in body.split(";"):
             parts = token.split("=")
@@ -735,6 +763,8 @@ class HKJCClient:
             except ValueError:
                 continue
             target[horse_no] = parse_odds(parts[1])
+            if grids is not None:
+                grids[horse_no] = parse_hkjc_grid(parts[2] if len(parts) > 2 else None)
 
     def fetch_results(self, meeting: Meeting, race_no: int) -> list[dict]:
         rows = self._results_html(meeting, race_no)
@@ -815,14 +845,18 @@ class HKJCClient:
         header_lower = [h.lower() for h in header_names]
 
         def col(*names: str) -> int | None:
+            def compact(value: str) -> str:
+                return re.sub(r"\s+", "", value or "").lower()
+
+            wanted = [compact(name) for name in names if name]
             for i, h in enumerate(header_names):
-                for name in names:
-                    if name and name in h:
-                        return i
+                hc = compact(h)
+                if any(token and token in hc for token in wanted):
+                    return i
             for i, h in enumerate(header_lower):
-                for name in names:
-                    if name and name.lower() in h:
-                        return i
+                hc = compact(h)
+                if any(token and token in hc for token in wanted):
+                    return i
             return None
 
         idx_pla = col("名次", "pla.")
@@ -898,25 +932,27 @@ class HKJCClient:
             cells = [c.get_text(" ", strip=True) for c in tr.find_all(["td", "th"])]
             if not cells:
                 continue
-            joined = " ".join(cells).upper()
-            if "WIN" in cells[0].upper() or cells[0] in {"獨贏"}:
+            label = re.sub(r"\s+", "", cells[0] or "")
+            upper = label.upper()
+            if label in {"獨贏"} or upper == "WIN":
                 current_pool = "WIN"
-            elif "PLACE" in cells[0].upper() or cells[0] in {"位置"}:
+            elif label in {"位置"} or upper == "PLACE":
                 current_pool = "PLA"
+            elif label:
+                # 位置Q / 連贏 / 二重彩… must not reuse 位置 horse numbers
+                current_pool = ""
             numbers = [int(x) for x in re.findall(r"\b(\d{1,2})\b", " ".join(cells))]
             money = re.findall(r"\$?\s*([0-9]+\.[0-9]+)", " ".join(cells))
             if current_pool == "WIN" and numbers and money:
                 win_div[numbers[0]] = float(money[0])
             elif current_pool == "PLA":
-                # pairs of horse / dividend walking the row
-                if len(cells) >= 3:
-                    n = self._to_int(cells[1] if len(cells) > 1 else cells[0])
-                    divs = re.findall(r"([0-9]+\.[0-9]+)", cells[-1] if cells else "")
-                    if n and divs:
-                        pla_div[n] = float(divs[0])
+                n = self._to_int(cells[1] if len(cells) > 1 else cells[0])
+                divs = re.findall(r"([0-9]+\.[0-9]+)", cells[-1] if cells else "")
+                if n and divs:
+                    pla_div[n] = float(divs[0])
                 elif numbers and money:
-                    for n, m in zip(numbers, money):
-                        pla_div[n] = float(m)
+                    for horse_no, amount in zip(numbers, money):
+                        pla_div[horse_no] = float(amount)
         return win_div, pla_div
 
     @staticmethod

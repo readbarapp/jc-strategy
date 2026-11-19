@@ -9,6 +9,7 @@ ODDS_FIELDS = [
     "scheduled_time",
     "checkpoint",
     "capture_timestamp",
+    "minutes_to_post",
     "horse_no",
     "horse_name",
     "win_odds",
@@ -16,6 +17,23 @@ ODDS_FIELDS = [
     "prev_win_odds",
     "win_drop_pct",
     "is_brown_grid",
+    "hkjc_grid",
+    "place_grid",
+]
+
+TICK_FIELDS = [
+    "race_date",
+    "venue",
+    "race_no",
+    "scheduled_time",
+    "capture_timestamp",
+    "minutes_to_post",
+    "horse_no",
+    "horse_name",
+    "win_odds",
+    "place_odds",
+    "hkjc_grid",
+    "place_grid",
 ]
 
 RESULTS_FIELDS = [

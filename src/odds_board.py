@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .odds_math import is_brown_grid, parse_odds, win_drop_pct
+from .odds_math import official_brown, parse_hkjc_grid, parse_odds, win_drop_pct
 
 CHECKPOINTS = ["T-15", "T-10", "T-5", "T-1", "T-0"]
 CP_SUFFIX = {
@@ -25,6 +25,11 @@ WIDE_FIELDS = [
     "odds_t5",
     "odds_t1",
     "odds_t0",
+    "grid_t15",
+    "grid_t10",
+    "grid_t5",
+    "grid_t1",
+    "grid_t0",
     "drop_t10",
     "drop_t5",
     "drop_t1",
@@ -41,6 +46,7 @@ WIDE_FIELDS = [
 def pivot_odds(rows: list[dict], threshold: float = 50.0, pool: str = "win") -> list[dict]:
     """One row per horse. pool='win' uses win_odds; pool='place' uses place_odds."""
     field = "place_odds" if pool == "place" else "win_odds"
+    grid_field = "place_grid" if pool == "place" else "hkjc_grid"
     pool_label = "PLA" if pool == "place" else "WIN"
     grouped: dict[tuple, dict] = {}
     for row in rows:
@@ -63,6 +69,7 @@ def pivot_odds(rows: list[dict], threshold: float = 50.0, pool: str = "win") -> 
                 "horse_no": row.get("horse_no", ""),
                 "horse_name": row.get("horse_name", ""),
                 "odds": {},
+                "grids": {},
             },
         )
         if row.get("horse_name"):
@@ -70,6 +77,7 @@ def pivot_odds(rows: list[dict], threshold: float = 50.0, pool: str = "win") -> 
         if row.get("scheduled_time"):
             item["scheduled_time"] = row.get("scheduled_time")
         item["odds"][cp] = parse_odds(row.get(field))
+        item["grids"][cp] = parse_hkjc_grid(row.get(grid_field))
 
     wide: list[dict] = []
     for item in grouped.values():
@@ -87,13 +95,18 @@ def pivot_odds(rows: list[dict], threshold: float = 50.0, pool: str = "win") -> 
         for cp in CHECKPOINTS:
             suffix = CP_SUFFIX[cp]
             current = item["odds"].get(cp)
+            grid = item["grids"].get(cp) or ""
             out[f"odds_{suffix}"] = "" if current is None else current
+            out[f"grid_{suffix}"] = grid
             if prev_cp is None:
+                brown = grid == "brown"
+                if brown:
+                    brown_at.append(cp)
                 prev_cp = cp
                 continue
             prev = item["odds"].get(prev_cp)
             drop = win_drop_pct(prev, current)
-            brown = is_brown_grid(drop, threshold) if current is not None and prev is not None else False
+            brown = official_brown(grid, drop, threshold)
             out[f"drop_{suffix}"] = drop
             out[f"brown_{suffix}"] = "true" if brown else "false"
             if brown:

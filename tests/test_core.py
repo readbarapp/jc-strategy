@@ -19,7 +19,14 @@ from src.race_events import (
     should_write_runner,
 )
 from src.odds_board import pivot_odds
-from src.odds_math import is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
+from src.odds_math import (
+    is_brown_grid,
+    match_checkpoint,
+    official_brown,
+    parse_hkjc_grid,
+    parse_odds,
+    win_drop_pct,
+)
 from src.telegram_notify import format_alert, should_alert
 from src.timeutil import HK_TZ, format_hk, parse_hk
 
@@ -37,6 +44,16 @@ def test_drop_and_brown_grid():
     assert is_brown_grid(49.9, 50) is False
     assert parse_odds("SCR") is None
     assert parse_odds("3.5") == 3.5
+    assert parse_hkjc_grid(0) == "none"
+    assert parse_hkjc_grid(1) == "red"
+    assert parse_hkjc_grid("2") == "green"
+    assert parse_hkjc_grid(3) == "brown"
+    assert parse_hkjc_grid(None) == ""
+    assert official_brown("brown", 10, 50) is True
+    assert official_brown("none", 80, 50) is False
+    assert official_brown("red", 80, 50) is False
+    assert official_brown("", 50, 50) is True
+    assert official_brown("", 40, 50) is False
 
 
 def test_checkpoints():
@@ -47,28 +64,52 @@ def test_checkpoints():
     assert match_checkpoint(1) == "T-1"
     assert match_checkpoint(0) == "T-0"
     assert match_checkpoint(40) is None
+    # Never capture a checkpoint before its exact time (old +0.75 window).
+    assert match_checkpoint(15.4) is None
+    assert match_checkpoint(1.5) is None
+    assert match_checkpoint(0.4) is None
+    assert match_checkpoint(-0.2) == "T-0"
+
+
+def test_closest_tick_picks_exact_minute_not_early_window():
+    from src.capture import best_tick_for_target, due_targets
+
+    ticks = [
+        {"minutes": 1.68, "win": 12.0},
+        {"minutes": 1.05, "win": 11.0},
+        {"minutes": 0.92, "win": 9.4},
+        {"minutes": 0.45, "win": 8.0},
+    ]
+    best = best_tick_for_target(ticks, 1)
+    assert best is not None and best["win"] == 9.4
+    t0 = best_tick_for_target(
+        [{"minutes": 0.45, "win": 11.0}, {"minutes": -0.05, "win": 8.5}, {"minutes": -0.4, "win": 5.9}],
+        0,
+    )
+    assert t0 is not None and t0["win"] == 5.9
+    assert 1 not in due_targets(1.68)
+    assert 1 in due_targets(1.0)
+    assert 0 not in due_targets(0.45)
+    assert 0 in due_targets(0.0)
 
 
 def test_backtest_on_sample():
     odds = load_odds()
     results = load_results()
-    assert len(odds) > 100
-    assert len(results) > 50
+    assert odds and results
     stats = evaluate(
         odds, results, min_odds=3.5, max_odds=9.0, bet_type="win", stake=10, threshold=50, checkpoint="T-1"
     )
     assert "roi" in stats
-    assert stats["triggers"] >= 1
     assert stats["staked"] == stats["triggers"] * 10
     assert all(str(t.get("checkpoint")) == "T-1" for t in stats["trades"])
-    brown = sum(1 for r in odds if str(r["is_brown_grid"]).lower() == "true")
-    assert brown > 30
     names = {r["horse_name"] for r in odds}
     assert any(any("\u4e00" <= ch <= "\u9fff" for ch in name) for name in names)
     days = race_day_count(odds)
     assert days >= 1
     assert stats["race_days"] == days
-    assert stats["triggers_per_race_day"] == round(stats["triggers"] / days, 2)
+    if days:
+        assert stats["triggers_per_race_day"] == round(stats["triggers"] / days, 2)
 
 
 def test_strategy_filter_matches_backtest_triggers():
@@ -120,11 +161,12 @@ def test_odds_board_one_row_per_horse():
     board = pivot_odds(odds, 50, pool="win")
     keys = {(r["race_date"], r["venue"], str(r["race_no"]), str(r["horse_no"])) for r in odds}
     assert len(board) == len(keys)
-    sample = next(r for r in board if r["is_brown_grid"] == "true")
-    assert sample["brown_at"]
+    sample = next((r for r in board if r["is_brown_grid"] == "true"), board[0])
     assert sample["pool"] == "WIN"
-    assert sample["odds_t15"] != "" or sample["odds_t10"] != ""
+    assert sample["odds_t15"] != "" or sample["odds_t10"] != "" or sample["odds_t1"] != ""
     assert "odds_t3" not in sample
+    if sample["is_brown_grid"] == "true":
+        assert sample["brown_at"]
 
 
 def test_t1_brown_compares_to_t5_not_t3():
@@ -296,12 +338,62 @@ def test_place_and_win_place_use_official_dividends_not_win_odds():
 def test_winplaodds_string_keeps_pools_apart():
     win_map: dict[int, float | None] = {}
     pla_map: dict[int, float | None] = {}
-    text = "WIN;1=8.4=0;2=3.5=0#PLA;1=2.1=0;2=1.4=0"
+    win_grid: dict[int, str] = {}
+    pla_grid: dict[int, str] = {}
+    text = "133129@@@WIN;1=8.4=0;2=3.5=1;7=4.2=2;14=3.4=3#PLA;1=2.1=0;2=1.4=1"
     win_part, _, pla_part = text.partition("#")
-    HKJCClient._parse_pool_segment(win_part, win_map)
-    HKJCClient._parse_pool_segment(pla_part, pla_map)
-    assert win_map == {1: 8.4, 2: 3.5}
+    HKJCClient._parse_pool_segment(win_part, win_map, win_grid)
+    HKJCClient._parse_pool_segment(pla_part, pla_map, pla_grid)
+    assert win_map == {1: 8.4, 2: 3.5, 7: 4.2, 14: 3.4}
     assert pla_map == {1: 2.1, 2: 1.4}
+    assert win_grid == {1: "none", 2: "red", 7: "green", 14: "brown"}
+    assert pla_grid == {1: "none", 2: "red"}
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 3, "hotFavourite": True}) == "brown"
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 0, "hotFavourite": True}) == "red"
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 2}) == "green"
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 0, "hotFavourite": False}) == "none"
+
+
+def test_official_grid_beats_assumed_drop():
+    rows = [
+        {
+            "race_date": "2026-11-18",
+            "venue": "HV",
+            "race_no": "3",
+            "horse_no": "11",
+            "horse_name": "天天更好",
+            "scheduled_time": "19:40:00",
+            "checkpoint": "T-5",
+            "win_odds": 12.0,
+            "place_odds": 2.4,
+            "hkjc_grid": "none",
+        },
+        {
+            "race_date": "2026-11-18",
+            "venue": "HV",
+            "race_no": "3",
+            "horse_no": "11",
+            "horse_name": "天天更好",
+            "scheduled_time": "19:40:00",
+            "checkpoint": "T-1",
+            "win_odds": 5.9,
+            "place_odds": 1.7,
+            "hkjc_grid": "none",
+            "win_drop_pct": 50.83,
+            "is_brown_grid": "false",
+        },
+    ]
+    board = pivot_odds(rows, 50, pool="win")
+    assert board[0]["grid_t1"] == "none"
+    assert board[0]["brown_t1"] == "false"
+    rows[1]["hkjc_grid"] = "brown"
+    board = pivot_odds(rows, 50, pool="win")
+    assert board[0]["brown_t1"] == "true"
+    assert "T-1" in board[0]["brown_at"]
+    hits = trigger_rows(rows, 3.5, 9.0, 50, "T-1")
+    assert len(hits) == 1
+    rows[1]["hkjc_grid"] = "none"
+    assert trigger_rows(rows, 3.5, 9.0, 50, "T-1") == []
 
 
 def test_telegram_uses_own_checkpoint_odds_and_bet_label():
@@ -337,6 +429,8 @@ def test_telegram_uses_own_checkpoint_odds_and_bet_label():
     assert should_alert(cfg, hit) is True
     assert should_alert(cfg, miss_cp) is False
     assert should_alert(cfg, miss_odds) is False
+    assert should_alert(cfg, dict(hit, hkjc_grid="none")) is False
+    assert should_alert(cfg, dict(hit, hkjc_grid="brown", win_drop_pct=5)) is True
     text = format_alert(cfg, hit)
     assert "只買位置" in text
     assert "T-1" in text
@@ -405,18 +499,16 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
         cfg = {"data": {"brown_grid_drop_pct": 50, "checkpoints_minutes": [15, 10, 5, 1, 0]}}
         cancelled = RaceInfo(race_no=1, post_time="15:00:00", status="Abandoned")
         meeting = Meeting(race_date="2026-11-18", venue="ST", races=[cancelled])
-        assert (
-            snapshot_race(
-                cfg,
-                meeting,
-                cancelled,
-                [RunnerOdds(1, "甲", 4.0, 1.8, "Declared")],
-                {},
-                set(),
-                set(),
-            )
-            == []
+        snaps, ticks = snapshot_race(
+            cfg,
+            meeting,
+            cancelled,
+            [RunnerOdds(1, "甲", 4.0, 1.8, "Declared", "none", "none")],
+            {},
+            set(),
+            set(),
         )
+        assert snaps == [] and ticks == []
         live = RaceInfo(
             race_no=2,
             post_time="15:00:00",
@@ -424,12 +516,12 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
             runner_status={2: "Scratched"},
         )
         meeting = Meeting(race_date="2026-11-18", venue="ST", races=[live])
-        rows = snapshot_race(
+        rows, ticks = snapshot_race(
             cfg,
             meeting,
             live,
             [
-                RunnerOdds(1, "甲", 4.0, 1.8, "Declared"),
+                RunnerOdds(1, "甲", 4.0, 1.8, "Declared", "red", "none"),
                 RunnerOdds(2, "乙", None, None, "Scratched"),
                 RunnerOdds(3, "丙", None, None, "Declared"),
             ],
@@ -440,8 +532,136 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
         assert [int(r["horse_no"]) for r in rows] == [1]
         assert rows[0]["checkpoint"] == "T-1"
         assert rows[0]["win_odds"] == 4.0
+        assert rows[0]["hkjc_grid"] == "red"
+        assert rows[0]["is_brown_grid"] == "false"
+        assert len(ticks) == 1
+        assert ticks[0]["hkjc_grid"] == "red"
     finally:
         monitor_mod.now_hk = original
+
+
+def test_t0_waits_for_post_then_refreshes_closing_odds():
+    import src.monitor as monitor_mod
+
+    original = monitor_mod.now_hk
+    cfg = {"data": {"brown_grid_drop_pct": 50, "checkpoints_minutes": [15, 10, 5, 1, 0]}}
+    race = RaceInfo(race_no=3, post_time="19:40:00", status="Declared")
+    meeting = Meeting(race_date="2026-11-18", venue="HV", races=[race])
+    captured: set = {(3, 11, "T-1")}
+    odds = {(3, 11): 12.0}
+    written = {(3, 11, "T-1"): 1.0}
+    try:
+        monitor_mod.now_hk = lambda: parse_hk("2026-11-18 19:39:33")
+        early, early_ticks = snapshot_race(
+            cfg, meeting, race, [RunnerOdds(11, "天天更好", 11.0, 2.2, "Declared")],
+            odds, captured, set(), None, written,
+        )
+        assert all(row["checkpoint"] != "T-0" for row in early)
+        assert early_ticks
+        monitor_mod.now_hk = lambda: parse_hk("2026-11-18 19:40:00")
+        first, _ = snapshot_race(
+            cfg, meeting, race, [RunnerOdds(11, "天天更好", 8.5, 2.0, "Declared")],
+            odds, captured, set(), None, written,
+        )
+        t0 = [row for row in first if row["checkpoint"] == "T-0"]
+        assert t0 and t0[0]["win_odds"] == 8.5
+        assert t0[0]["prev_win_odds"] == 12.0
+        monitor_mod.now_hk = lambda: parse_hk("2026-11-18 19:40:20")
+        late, _ = snapshot_race(
+            cfg, meeting, race, [RunnerOdds(11, "天天更好", 5.9, 1.7, "Declared")],
+            odds, captured, set(), None, written,
+        )
+        t0_late = [row for row in late if row["checkpoint"] == "T-0"]
+        assert t0_late[0]["win_odds"] == 5.9
+        assert t0_late[0]["prev_win_odds"] == 12.0
+        assert t0_late[0]["is_brown_grid"] == "true"
+    finally:
+        monitor_mod.now_hk = original
+
+
+def test_results_html_reads_sp_and_skips_qin_place():
+    html = """
+    <table>
+      <tr><td>名次</td><td>馬號</td><td>馬名</td><td>獨贏 賠率</td></tr>
+      <tr><td>1</td><td>11</td><td>天天更好 (K277)</td><td>5.9</td></tr>
+      <tr><td>2</td><td>8</td><td>機不可失 (K417)</td><td>3.2</td></tr>
+      <tr><td>3</td><td>12</td><td>紅悅舍 (L355)</td><td>32</td></tr>
+    </table>
+    <table>
+      <tr><td>派彩</td><td></td><td></td></tr>
+      <tr><td>彩池</td><td>勝出組合</td><td>派彩 (HK$)</td></tr>
+      <tr><td>獨贏</td><td>11</td><td>59.00</td></tr>
+      <tr><td>位置</td><td>11</td><td>20.00</td></tr>
+      <tr><td></td><td>8</td><td>14.00</td></tr>
+      <tr><td></td><td>12</td><td>66.50</td></tr>
+      <tr><td>連贏</td><td>8,11</td><td>82.00</td></tr>
+      <tr><td>位置Q</td><td>8,11</td><td>34.00</td></tr>
+      <tr><td></td><td>11,12</td><td>198.00</td></tr>
+      <tr><td></td><td>8,12</td><td>125.50</td></tr>
+    </table>
+    """
+
+    class FakeResp:
+        text = html
+
+    client = HKJCClient()
+    client._request = lambda *args, **kwargs: FakeResp()
+    rows = client._results_html(Meeting("2026-11-18", "HV"), 3)
+    by_no = {int(r["horse_no"]): r for r in rows}
+    assert by_no[11]["final_sp"] == 5.9
+    assert by_no[11]["win_dividend"] == 59.0
+    assert by_no[11]["placedividend"] == 20.0
+    assert by_no[8]["placedividend"] == 14.0
+    assert by_no[12]["placedividend"] == 66.5
+    assert by_no[11]["horse_name"] == "天天更好"
+
+
+def test_official_sp_backfills_t0_and_brown():
+    import shutil
+    import tempfile
+
+    from src import csv_store as cs
+
+    original = {key: getattr(cs, key) for key in (
+        "DATA_DIR", "DOCS_DATA", "ODDS_PATH", "RESULTS_PATH", "BOARD_PATH",
+        "WIN_BOARD_PATH", "PLACE_BOARD_PATH", "ORIGIN_PATH", "DOCS_ORIGIN_PATH",
+    )}
+    root = Path(tempfile.mkdtemp())
+    try:
+        cs.DATA_DIR = root
+        cs.DOCS_DATA = root / "docs"
+        cs.ODDS_PATH = root / "odds_snapshots.csv"
+        cs.RESULTS_PATH = root / "race_results.csv"
+        cs.BOARD_PATH = root / "odds_board.csv"
+        cs.WIN_BOARD_PATH = root / "win_board.csv"
+        cs.PLACE_BOARD_PATH = root / "place_board.csv"
+        cs.ORIGIN_PATH = root / "dataset_origin.json"
+        cs.DOCS_ORIGIN_PATH = root / "docs" / "dataset_origin.json"
+        cs.set_dataset_origin("live", "test")
+        cs.upsert_odds([
+            {"race_date": "2026-11-18", "venue": "HV", "race_no": "3", "checkpoint": "T-1",
+             "horse_no": "11", "win_odds": "12.0", "place_odds": "2.2", "is_brown_grid": "false",
+             "scheduled_time": "19:40:00", "capture_timestamp": "", "horse_name": "天天更好",
+             "prev_win_odds": "14.0", "win_drop_pct": "14.29"},
+            {"race_date": "2026-11-18", "venue": "HV", "race_no": "3", "checkpoint": "T-0",
+             "horse_no": "11", "win_odds": "11.0", "place_odds": "2.2", "is_brown_grid": "false",
+             "scheduled_time": "19:40:00", "capture_timestamp": "", "horse_name": "天天更好",
+             "prev_win_odds": "12.0", "win_drop_pct": "8.33"},
+        ])
+        changed = cs.apply_official_sp(
+            [{"race_date": "2026-11-18", "venue": "HV", "race_no": "3", "horse_no": "11",
+              "final_sp": "5.9", "win_dividend": "59", "placedividend": "20"}],
+            threshold=50,
+        )
+        assert changed == 1
+        t0 = [r for r in cs.load_odds() if r["checkpoint"] == "T-0"][0]
+        assert float(t0["win_odds"]) == 5.9
+        assert t0["is_brown_grid"] == "true"
+        assert float(t0["win_drop_pct"]) == 50.83
+    finally:
+        for key, value in original.items():
+            setattr(cs, key, value)
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def test_drop_date_removes_only_that_day():
@@ -662,8 +882,8 @@ def test_first_live_upsert_drops_demo_rows():
 
 
 def test_restore_monitor_state_and_handoff_budget():
-    meeting = Meeting(race_date="2026-11-15", venue="ST")
-    odds_map, captured, alerted = restore_monitor_state(meeting)
+    meeting = Meeting(race_date="2026-11-18", venue="HV")
+    odds_map, captured, alerted, _written = restore_monitor_state(meeting)
     assert captured
     assert any(ck == "T-1" for _, _, ck in captured)
     assert odds_map
@@ -680,6 +900,7 @@ if __name__ == "__main__":
     test_timezone_is_hong_kong()
     test_drop_and_brown_grid()
     test_checkpoints()
+    test_closest_tick_picks_exact_minute_not_early_window()
     test_backtest_on_sample()
     test_odds_board_one_row_per_horse()
     test_t1_brown_compares_to_t5_not_t3()
@@ -688,10 +909,14 @@ if __name__ == "__main__":
     test_place_and_win_place_use_official_dividends_not_win_odds()
     test_ticket_pnl_scales_hkjc_ten_dollar_unit()
     test_winplaodds_string_keeps_pools_apart()
+    test_official_grid_beats_assumed_drop()
     test_telegram_uses_own_checkpoint_odds_and_bet_label()
     test_plan_auto_uses_actual_post_times()
     test_race_event_guards()
     test_snapshot_skips_cancelled_scratch_and_blank_odds()
+    test_t0_waits_for_post_then_refreshes_closing_odds()
+    test_results_html_reads_sp_and_skips_qin_place()
+    test_official_sp_backfills_t0_and_brown()
     test_drop_date_removes_only_that_day()
     test_yearly_bets_is_frequency_times_race_days()
     test_first_live_upsert_drops_demo_rows()

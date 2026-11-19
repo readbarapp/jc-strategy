@@ -5,7 +5,7 @@
 <ol>
 <li><strong>賽日自動問馬會</strong>：今日沙田定跑馬地有賽？第一場官方幾點開跑？冇就收工。</li>
 <li><strong>開跑前抄賠率</strong>：每場開賽前 15、10、5、1 分鐘同開跑嗰下，分開抄獨贏同位置。</li>
-<li><strong>啡格警報</strong>：預設喺開賽前 1 分鐘，如果獨贏比起開賽前 5 分鐘平咗一半或以上，而且賠率落喺你設定範圍，就 Telegram 通知你。</li>
+<li><strong>啡格警報</strong>：預設喺開賽前 1 分鐘，如果投注盤顯示獨贏啡格，而且賠率落喺你設定範圍，就 Telegram 通知你。</li>
 <li><strong>完場抄派彩</strong>：官方名次、獨贏派彩、位置派彩，之後用嚟回測賺蝕。</li>
 <li><strong>網站即時睇</strong>：數據中心、策略回測、蒙地卡羅、Telegram 設定、日誌。</li>
 </ol>
@@ -24,9 +24,9 @@
 <li>同 bot 先傾一句，或者加 bot 入你嘅頻道。</li>
 <li>用 <code>@userinfobot</code> 或者類似工具拎 <strong>chat id</strong>（頻道多數係 <code>-100</code> 開頭）。</li>
 <li>GitHub <strong>Settings → Secrets and variables → Actions</strong> 加：</li>
+<li><code>TELEGRAM_BOT_TOKEN</code></li>
+<li><code>TELEGRAM_CHAT_ID</code>（可選；亦可以只寫喺網站 Telegram 頁）</li>
 </ol>
-<p>   - <code>TELEGRAM_BOT_TOKEN</code></p>
-<p>   - <code>TELEGRAM_CHAT_ID</code>（可選；亦可以只寫喺網站 Telegram 頁）</p>
 <p><strong>唔好</strong>把 token 提交入 <code>config.json</code>。網站儲存設定時會自動刪走 token。真正監控一定讀 GitHub Secret。</p>
 <h3>D. （可選）網頁改設定、人手觸發</h3>
 <p>網站本身係靜態頁，要由瀏覽器改 repo 或者撳「觸發今日監控」，需要 <strong>Personal Access Token</strong>：</p>
@@ -47,17 +47,51 @@
 <hr />
 <h2>每個賽馬日：時間表</h2>
 <h3>賽日前一晚／當日朝早</h3>
-<table><thead><tr><th>做咩</th><th>點先算完成</th></tr></thead><tbody>
-<tr><td>確認今日真係有香港賽馬（沙田或跑馬地）</td><td>馬會賽程或網站狀態頁之後會顯示場地</td></tr>
-<tr><td>確認 Telegram 測試仍然得</td><td>隨便撳一次「發送測試訊息」</td></tr>
-<tr><td>睇下賠率範圍／時間點仲係咪你想要嘅</td><td>策略頁同 Telegram 頁</td></tr>
-<tr><td><strong>唔使</strong>提早撳監控</td><td>排程會自己問馬會今日第一場幾點，到監控窗先抄數</td></tr>
-</tbody></table>
+<table>
+<thead>
+<tr>
+<th>做咩</th>
+<th>點先算完成</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>確認今日真係有香港賽馬（沙田或跑馬地）</td>
+<td>馬會賽程或網站狀態頁之後會顯示場地</td>
+</tr>
+<tr>
+<td>確認 Telegram 測試仍然得</td>
+<td>隨便撳一次「發送測試訊息」</td>
+</tr>
+<tr>
+<td>睇下賠率範圍／時間點仲係咪你想要嘅</td>
+<td>策略頁同 Telegram 頁</td>
+</tr>
+<tr>
+<td><strong>唔使</strong>提早撳監控</td>
+<td>排程會自己問馬會今日第一場幾點，到監控窗先抄數</td>
+</tr>
+</tbody>
+</table>
 <p>排程（香港時間；<strong>唔再寫死</strong> 11:00／17:30）：</p>
-<table><thead><tr><th>時間</th><th>做咩</th></tr></thead><tbody>
-<tr><td><strong>09:00–00:30 每隔約 30 分鐘</strong></td><td>偵測今日有冇賽、讀官方第一場 <code>postTime</code>；到監控窗先開始 <code>auto</code></td></tr>
-<tr><td><strong>00:20</strong>（第二日零晨）</td><td>再收一次官方賽果，怕夜賽完得遲</td></tr>
-</tbody></table>
+<table>
+<thead>
+<tr>
+<th>時間</th>
+<th>做咩</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>09:00–00:30 每隔約 30 分鐘</strong></td>
+<td>偵測今日有冇賽、讀官方第一場 <code>postTime</code>；到監控窗先開始 <code>auto</code></td>
+</tr>
+<tr>
+<td><strong>00:20</strong>（第二日零晨）</td>
+<td>再收一次官方賽果，怕夜賽完得遲</td>
+</tr>
+</tbody>
+</table>
 <p><code>auto</code> 會自己問今日有冇賽。冇就幾分鐘內收工。有賽但第一場仲好遠，亦會收工等下一格排程，唔會由朝空等到晚（Actions 最長 6 小時）。</p>
 <p>PAT 只係網站改設定／人手觸發用。賽日自動跑靠 GitHub Actions，你唔開網站都得。</p>
 <h3>開跑前（系統自動）</h3>
@@ -65,15 +99,13 @@
 <li>偵測到今日有 ST 或 HV，並讀當日每一場官方開跑時間。</li>
 <li>等到 <strong>當日第一場開跑前 20 分鐘</strong> 先進入高頻（預設每 10 秒問一次馬會）。沙田遲開、跑馬地提早、臨時改鐘都跟馬會當日時間。</li>
 <li>每一場、每一隻馬，只喺呢幾個鐘點各寫一次：</li>
-</ol>
-<p>   - 開賽前 <strong>15</strong> 分鐘</p>
-<p>   - 開賽前 <strong>10</strong> 分鐘</p>
-<p>   - 開賽前 <strong>5</strong> 分鐘</p>
-<p>   - 開賽前 <strong>1</strong> 分鐘</p>
-<p>   - <strong>開跑</strong>嗰下</p>
-<ol>
+<li>開賽前 <strong>15</strong> 分鐘</li>
+<li>開賽前 <strong>10</strong> 分鐘</li>
+<li>開賽前 <strong>5</strong> 分鐘</li>
+<li>開賽前 <strong>1</strong> 分鐘</li>
+<li><strong>開跑</strong>嗰下</li>
 <li><strong>唔抄開賽前 3 分鐘。</strong></li>
-<li>開賽前 1 分鐘嘅啡格，係同 <strong>開賽前 5 分鐘</strong> 嘅獨贏比。跌幅 ≥ 門檻（預設 50%），而且嗰刻獨贏喺 Telegram 範圍內，就即刻推播。每隻馬每場最多一條警報。</li>
+<li>開賽前 1 分鐘如果馬會投注盤顯示獨贏啡格，而且嗰刻獨贏喺 Telegram 範圍內，就即刻推播。每隻馬每場最多一條警報。紅／綠格會抄低但唔當策略訊號。</li>
 </ol>
 <p>你呢段時間可以：</p>
 <ul>
@@ -100,11 +132,11 @@
 <h2>四個分頁點用</h2>
 <h3>數據中心</h3>
 <ul>
-<li><strong>獨贏賠率 / 位置賠率</strong>：一隻馬一行，欄位係開賽前 15／10／5／1 分鐘同開跑。啡色格 = 較上一個時間點（大約 5 分鐘前）跌 ≥ 門檻。</li>
-<li><strong>只看啡格</strong>：任何時間點獨贏急跌。獨贏、位置、賽果派彩三張表都可以用。</li>
-<li><strong>只看開賽1分鐘前出現啡格</strong>：淨 T-1 對 T-5 獨贏急跌。賽果派彩表同樣適用，方便你對照嗰批馬最後派咗幾多。</li>
-<li><strong>只看符合策略</strong>：跟<strong>策略回測</strong>頁而家嘅設定揀馬（選定時間點嘅獨贏啡格 ∩ 獨贏賠率範圍 ∩ 啡格門檻）。獨贏、位置、賽果三張表都係同一批馬。投注方法只影響回測點計錢，唔影響呢個 filter。</li>
-<li><strong>賽果派彩</strong>：官方名次同每 $10 派彩。開住啡格或者策略 filter 就只顯示對應嗰啲馬。</li>
+<li><strong>獨贏賠率 / 位置賠率</strong>：一隻馬一行，欄位係開賽前 15／10／5／1 分鐘同開跑。紅／綠／啡格跟投注盤官方顏色。</li>
+<li><strong>只看啡格</strong>：任何時間點馬會顯示獨贏啡格。獨贏、位置、賽果派彩三張表都可以用。</li>
+<li><strong>只看開賽1分鐘前出現啡格</strong>：淨 T-1 獨贏啡格。賽果派彩表同樣適用，方便你對照嗰批馬最後派咗幾多。</li>
+<li><strong>只看符合策略</strong>：跟 <strong>策略回測</strong> 頁而家嘅設定揀馬（選定時間點嘅獨贏啡格 ∩ 獨贏賠率範圍）。獨贏、位置、賽果三張表都係同一批馬。投注方法只影響回測點計錢，唔影響呢個 filter。</li>
+<li><strong>賽果派彩</strong>：官方名次同每 $10 派彩。開住啡格或者策略 filter，呢張表都只會剩低對應嗰啲馬（用獨贏急跌／策略條件對同一場同一號）。</li>
 <li><strong>單次快照 / 收取賽果</strong>：排程失手或者想即刻補數先用。</li>
 <li><strong>刪除所選日期嘅紀錄</strong>：表上面揀日期（或填可選日期），刪嗰日全部賠率同賽果。要 PAT。GitHub 舊 commit 仍可還原。</li>
 </ul>
@@ -132,25 +164,62 @@
 <p>GitHub → Actions → HKJC Monitor → Run workflow，可以選 <code>auto</code> / <code>monitor</code> / <code>results</code> / <code>once</code> / <code>test-telegram</code>，日期空白就當今日香港日期。</p>
 <hr />
 <h2>特別情況（延誤／取消／退出）同錯數點清</h2>
-<p>監控會大約每 45 秒再問一次馬會賽程。</p>
-<ul>
-<li>開跑時間改咗 ≥ 2 分鐘：刪嗰場舊時間點，跟新鐘再抄。</li>
-<li>單場取消／中止／void：停抄嗰場，唔收垃圾賽果。</li>
-<li>成日賽取消或賽程消失：停抄賠率，改試收已跑完嘅賽果。</li>
-<li>延誤但馬會未改鐘：唔會當完場；等到狀態變或者改鐘，最多再等 3 小時。</li>
-<li>退出／SCR／後備馬：唔寫入、唔推 Telegram；已寫過會刪走嗰隻。</li>
-<li>仍然見到古怪列：揀嗰日 → <strong>刪除所選日期嘅紀錄</strong> → <strong>收取賽果</strong> 或 <strong>單次快照</strong>。</li>
-</ul>
-<p>回測只計有觸發 + 有官方派彩嘅馬。開跑前已送出嘅 Telegram 啡格收唔返。</p>
+<p>監控會大約每 45 秒再問一次馬會賽程：</p>
+<table>
+<thead>
+<tr>
+<th>情況</th>
+<th>程式做咩</th>
+<th>你要唔使做</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>開跑時間改咗 ≥ 2 分鐘</td>
+<td>刪嗰場舊時間點，跟新鐘再抄</td>
+<td>唔使</td>
+</tr>
+<tr>
+<td>單場取消／中止／void</td>
+<td>停抄嗰場；唔收垃圾賽果</td>
+<td>唔使</td>
+</tr>
+<tr>
+<td>成日賽取消或賽程消失</td>
+<td>停抄賠率，改試收已跑完嘅賽果</td>
+<td>睇下狀態頁訊息</td>
+</tr>
+<tr>
+<td>延誤但馬會未改鐘</td>
+<td>唔會當完場；等到狀態變咗或改鐘，最多再等 3 小時</td>
+<td>拖好耐先至要人手「收取賽果」</td>
+</tr>
+<tr>
+<td>退出／SCR／後備馬</td>
+<td>唔寫入、唔推 Telegram；已寫過會刪走嗰隻</td>
+<td>唔使</td>
+</tr>
+<tr>
+<td>仍然見到古怪列</td>
+<td>—</td>
+<td>揀嗰日 → <strong>刪除所選日期嘅紀錄</strong> → <strong>收取賽果</strong> 或 <strong>單次快照</strong></td>
+</tr>
+</tbody>
+</table>
+<p>回測只計「有觸發 + 有官方派彩」嘅馬，取消／中止冇派彩嘅場唔會入 EV。Telegram 喺開跑前已經送出嘅啡格就收唔返，當參考就得。</p>
 <hr />
 <h2>常見問題</h2>
-<p><strong>點解表入面有舊日子但寫住示範數據？</strong>  </p>
-<p>歷史示範係假數據，欄位同真 crawl 一樣。真賽日 Actions 會把真實賠率 <strong>追加</strong> 入同一個 CSV，唔會用產生器覆蓋真數。</p>
-<p><strong>點解開賽前 1 分鐘未見啡格？</strong>  </p>
-<p>要等 T-5 同 T-1 <strong>兩筆都抄到</strong>，而且獨贏跌幅真係 ≥ 門檻。3 分鐘位唔會有資料。</p>
-<p><strong>收到 Telegram 但網站未更新？</strong>  </p>
-<p>通知即時送；CSV 最多等兩分鐘先 push。撳「重新載入數據」。</p>
-<p><strong>有賽但 job 話今日無賽？</strong>  </p>
-<p>只認沙田 <code>ST</code>、跑馬地 <code>HV</code>。海外或場外投注日唔會監控。可以喺 Actions 手動跑 <code>monitor</code> 並填日期 <code>YYYY-MM-DD</code>。</p>
-<p><strong>回測「只買位置」係咪用開賽前位置賠率？</strong>  </p>
-<p>唔係。揀馬用獨贏啡格；結算用官方位置派彩。</p>
+<p><strong>點解表入面有舊日子但寫住示範數據？</strong><br />
+歷史示範係假數據，欄位同真 crawl 一樣。真賽日 Actions 會把真實賠率 <strong>追加</strong> 入同一個 CSV，唔會用產生器覆蓋真數。</p>
+<p><strong>點解開賽前 1 分鐘未見啡格？</strong><br />
+要嗰下投注盤真係顯示啡格（紅格／綠格唔算）。舊數據未有官方格色先睇 T-5 同 T-1 跌幅 ≥ 門檻。3 分鐘位唔會有資料。</p>
+<p><strong>收到 Telegram 但網站未更新？</strong><br />
+通知即時送；CSV 最多等兩分鐘先 push。撳「重新載入數據」。</p>
+<p><strong>有賽但 job 話今日無賽？</strong><br />
+只認沙田 <code>ST</code>、跑馬地 <code>HV</code>。海外或場外投注日唔會監控。可以喺 Actions 手動跑 <code>monitor</code> 並填日期 <code>YYYY-MM-DD</code>。</p>
+<p><strong>回測「只買位置」係咪用開賽前位置賠率？</strong><br />
+唔係。揀馬用獨贏啡格；結算用官方位置派彩。</p>
+<p><strong>點解開跑賠率同馬會睇到嘅唔同（例如天天更好 11.0 vs 5.9）？</strong><br />
+舊版每個時間點都係「窗口一開就定格」，所以 T-15…T-0 都可能早咗幾十秒。而家系統會自己存每 10 秒一條路徑，到點先揀最接近嗰下；開跑格再用官方終賠校正。</p>
+<p><strong>馬會唔提供走勢，我點教系統？</strong><br />
+唔使盯盤。下一個賽日起數據中心撳一隻馬就會見到 5 個時間點、官方終賠、同 10 秒路徑。你記得邊格獨贏，填上去撳「寫入更正」。終賠同 T-0 差 ≥ 10% 會喺表下面列出來。</p>

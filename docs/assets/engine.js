@@ -24,14 +24,31 @@
     return text;
   }
 
+  function parseHkjcGrid(value) {
+    const text = String(value == null ? "" : value).trim().toLowerCase();
+    if (!text) return "";
+    if (text === "0" || text === "none" || text === "n" || text === "-") return "none";
+    if (text === "1" || text === "red" || text === "hot" || text === "hotfavourite") return "red";
+    if (text === "2" || text === "green") return "green";
+    if (text === "3" || text === "brown" || text === "coffee") return "brown";
+    return "";
+  }
+
+  function officialBrown(row, threshold) {
+    const grid = parseHkjcGrid(row && row.hkjc_grid);
+    if (grid === "brown") return true;
+    if (grid === "none" || grid === "red" || grid === "green") return false;
+    const drop = num(row && row.win_drop_pct, 0);
+    return isTrue(row && row.is_brown_grid) || drop >= threshold;
+  }
+
   function triggers(odds, minOdds, maxOdds, threshold, checkpoint) {
     const wanted = normalizeCheckpoint(checkpoint);
     const best = new Map();
     for (const row of odds) {
       if (String(row.checkpoint || "").toUpperCase() !== wanted) continue;
       const win = num(row.win_odds, NaN);
-      const drop = num(row.win_drop_pct, 0);
-      const brown = isTrue(row.is_brown_grid) || drop >= threshold;
+      const brown = officialBrown(row, threshold);
       if (!Number.isFinite(win) || !brown) continue;
       if (win < minOdds || win > maxOdds) continue;
       const key = `${row.race_date}|${row.venue}|${row.race_no}|${row.horse_no}`;
@@ -228,12 +245,15 @@
           horse_no: row.horse_no,
           horse_name: row.horse_name,
           odds: {},
+          grids: {},
         });
       }
       const item = grouped.get(key);
       if (row.horse_name) item.horse_name = row.horse_name;
       if (row.scheduled_time) item.scheduled_time = row.scheduled_time;
       item.odds[cp] = num(row[field], NaN);
+      const gridField = pool === "place" ? "place_grid" : "hkjc_grid";
+      item.grids[cp] = parseHkjcGrid(row[gridField]);
     }
     const wide = [];
     for (const item of grouped.values()) {
@@ -251,8 +271,11 @@
       for (const cp of CHECKPOINTS) {
         const suffix = CP_SUFFIX[cp];
         const current = item.odds[cp];
+        const grid = item.grids[cp] || "";
         out["odds_" + suffix] = Number.isFinite(current) ? current : "";
+        out["grid_" + suffix] = grid;
         if (!prevCp) {
+          if (grid === "brown") brownAt.push(cp);
           prevCp = cp;
           continue;
         }
@@ -261,7 +284,7 @@
         if (Number.isFinite(prev) && prev > 0 && Number.isFinite(current)) {
           drop = Math.round(((prev - current) / prev) * 10000) / 100;
         }
-        const brown = Number.isFinite(current) && Number.isFinite(prev) && drop >= threshold;
+        const brown = officialBrown({ hkjc_grid: grid, win_drop_pct: drop, is_brown_grid: false }, threshold);
         out["drop_" + suffix] = drop;
         out["brown_" + suffix] = brown;
         if (brown) brownAt.push(cp);
@@ -286,6 +309,8 @@
     monteCarlo,
     triggers,
     pivotOdds,
+    officialBrown,
+    parseHkjcGrid,
     raceDayCount,
     yearlyBets,
     ticketPnl,

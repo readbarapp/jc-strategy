@@ -8,7 +8,7 @@ from typing import Any
 import requests
 
 from .logger import log, log_exception
-from .odds_math import is_brown_grid, parse_odds
+from .odds_math import official_brown, parse_odds
 from .schema import VENUE_NAMES
 from .timeutil import format_hk, now_hk, weekday_zh
 
@@ -97,7 +97,7 @@ def should_alert(cfg: dict[str, Any], row: dict[str, Any]) -> bool:
         if tg.get("min_drop_pct") not in (None, "")
         else (cfg.get("data") or {}).get("brown_grid_drop_pct", 50)
     )
-    if not is_brown_grid(drop, threshold):
+    if not official_brown(row.get("hkjc_grid"), drop, threshold, row.get("is_brown_grid")):
         return False
     lo = float(tg.get("min_odds", 3.5))
     hi = float(tg.get("max_odds", 9.0))
