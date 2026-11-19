@@ -16,7 +16,7 @@ scraper_runner.py auto
         │     有、全部完咗 → 抄官方賽果
         │
         ├─ 第一次真實寫入 → 刪晒示範 CSV
-        ├─ 每個時間點：投注盤 getJSON 獨贏+位置+紅／綠／啡格（失敗改 GraphQL）
+        ├─ 每個時間點：投注盤 getJSON 獨贏+位置+啡格（失敗改 GraphQL；紅／綠丟棄）
         ├─ 約每 45 秒重讀賽程：postTime 改 ≥ 2 分鐘就刪嗰場舊 checkpoint 再抄；取消／中止停抄；SCR／後備唔寫
         ├─ 延誤但未改鐘：唔當完場，延長監控最多 3 小時
         ├─ HTTP 429／403／斷線 → 退後 8–120 秒再試，之後減慢輪詢
@@ -124,7 +124,7 @@ scraper_runner.py auto
 </tbody>
 </table>
 <p>海外場地會被丟掉。</p>
-<h3>2. 即時獨贏、位置同紅／綠／啡格（主通道：投注盤）</h3>
+<h3>2. 即時獨贏、位置同啡格（主通道：投注盤）</h3>
 <p>呢條就係投注 app／bet.hkjc.com 即時盤用嘅公開 JSON，賠率同格色一齊嚟，唔使自己估 50% 先當啡格。</p>
 <pre><code>GET https://bet.hkjc.com/racing/getJSON.aspx
     ?type=winplaodds
@@ -141,7 +141,7 @@ scraper_runner.py auto
 <li>用 <code>#</code> 切開：前半獨贏，後半位置。</li>
 <li>每半邊用 <code>;</code> 切開。第一段係 <code>WIN</code> 或 <code>PLA</code> 標籤，其餘每段 <code>馬號=賠率=標記</code>。</li>
 <li><strong>第一個數字</strong> = 馬號；<strong>第二個</strong> = 賠率（寫入對應欄）。</li>
-<li><strong>第三個</strong> = 官方格色：<code>0</code> 無色、<code>1</code> 紅格／大熱、<code>2</code> 綠格、<code>3</code> 啡格。獨贏寫入 <code>hkjc_grid</code>，位置寫入 <code>place_grid</code>。<code>is_brown_grid</code> 只喺標記係 <code>3</code> 先為真。</li>
+<li><strong>第三個</strong> = 官方格色。只把 <code>3</code> 當啡格寫入 <code>hkjc_grid</code>／<code>place_grid</code>；<code>0</code>／<code>1</code> 紅／<code>2</code> 綠一律當 <code>none</code>。</li>
 <li>獨贏 map 同位置 map 分開填，最後用馬號合併成同一隻馬兩欄。</li>
 </ol>
 <p>所以「crawl 邊一格」喺呢條通道就係：<strong><code>OUT</code> 字串、<code>#</code> 前 WIN 段、<code>#</code> 後 PLA 段、每個 <code>馬號=賠率=格色</code>。</strong></p>
@@ -195,7 +195,7 @@ scraper_runner.py auto
 </tr>
 </tbody>
 </table>
-<p><code>oddsDropValue</code> 同樣係 0／1／2／3；<code>hotFavourite</code> 為真就當紅格。兩個 map 都空 → 當 getJSON 同 GraphQL 都失敗，唔會把空白當真實賠率。馬名用第 1 步已經備好嘅 <code>name_ch</code>。</p>
+<p><code>oddsDropValue == 3</code> 先當啡格；<code>hotFavourite</code>／紅／綠唔存。兩個 map 都空 → 當 getJSON 同 GraphQL 都失敗，唔會把空白當真實賠率。馬名用第 1 步已經備好嘅 <code>name_ch</code>。</p>
 <h3>4. 官方賽果同派彩</h3>
 <p>主通道係中文賽果頁（用瀏覽器打開就係你平日睇派彩嗰版）：</p>
 <pre><code>GET https://racing.hkjc.com/racing/information/Chinese/Racing/LocalResults.aspx
@@ -291,7 +291,7 @@ scraper_runner.py auto
 <tr>
 <td><code>commit_every_seconds</code></td>
 <td><code>120</code></td>
-<td>幾耐先 git push 一次</td>
+<td>幾耐先 git push 一次（存檔用；網站即時欄唔經呢條）</td>
 </tr>
 <tr>
 <td><code>brown_grid_drop_pct</code></td>
@@ -300,6 +300,8 @@ scraper_runner.py auto
 </tr>
 </tbody>
 </table>
+<p>免費 GitHub Pages <strong>唔係</strong> live server。每次改 CSV 都要 git commit + Pages 重建／CDN，所以 120 秒係存檔節奏，唔係畫面節奏。以前 iPhone monitor 之所以密，幾乎肯定係部機自己問馬會。</p>
+<p>免費情況下最密嘅做法：瀏覽器直接 POST <code>https://info.cld.hkjc.com/graphql/base/</code>（CORS <code>*</code>，約 4 秒）；<code>getJSON</code> 由 github.io 開會被擋，只留俾 Actions 10 秒存檔；git push CSV 仍然約 120 秒。</p>
 <p>每一場開跑時間 <code>postTime</code> 減而家香港時間 = 仲有幾多分鐘。窗口只喺<strong>該鐘點當刻或之後</strong>先開，唔會提早 30–45 秒定格：</p>
 <table>
 <thead>
@@ -313,7 +315,7 @@ scraper_runner.py auto
 <tr>
 <td>T-15</td>
 <td>15.0–13.5 分鐘</td>
-<td>嗰下投注盤官方紅／綠／啡</td>
+<td>嗰下投注盤官方啡格（紅／綠丟棄）</td>
 </tr>
 <tr>
 <td>T-10</td>
@@ -349,7 +351,7 @@ scraper_runner.py auto
 <hr />
 <h2>四、點樣「分析」</h2>
 <h3>啡格（跟馬會顯示，唔係自己估 50%）</h3>
-<p>新數據：<code>hkjc_grid == brown</code>（getJSON 標記 <code>3</code>，或者 GraphQL <code>oddsDropValue == 3</code>）先當啡格。紅格、綠格會顯示，但策略／Telegram 唔當訊號。</p>
+<p>新數據：<code>hkjc_grid == brown</code>（getJSON 標記 <code>3</code>，或者 GraphQL <code>oddsDropValue == 3</code>）先當啡格。紅格、綠格唔會寫入。</p>
 <p>舊數據未有 <code>hkjc_grid</code>：先用跌幅門檻（預設 50%），方便示範同歷史列仍然睇到急跌。</p>
 <pre><code>跌幅% = (上一時間點獨贏 − 呢個時間點獨贏) / 上一時間點獨贏 × 100   ← 只係參考
 啡格 = 馬會顯示啡格；冇官方格色先用 跌幅 ≥ 門檻

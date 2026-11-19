@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/app.css?v=20261119a" />
+  <link rel="stylesheet" href="./assets/app.css?v=20261119d" />
 </head>
 <body class="min-h-screen text-slate-100 rail">
   <div class="flex min-h-screen">
@@ -37,7 +37,7 @@
         <button data-tab="status" class="rounded-xl border border-transparent px-3 py-2.5 text-left text-slate-400 hover:text-gold-300">即時狀態 · 日誌</button>
         <button data-tab="guide" class="rounded-xl border border-transparent px-3 py-2.5 text-left text-slate-400 hover:text-gold-300">使用說明</button>
       </nav>
-      <p class="mt-6 text-[11px] leading-relaxed text-slate-600">時間一律 Asia/Hong_Kong（UTC+8）。紅／綠／啡格跟馬會投注盤官方顏色。本工具僅供研究回測，並非投注建議。</p>
+      <p class="mt-6 text-[11px] leading-relaxed text-slate-600">時間一律 Asia/Hong_Kong（UTC+8）。只跟馬會投注盤啡格。本工具僅供研究回測，並非投注建議。</p>
     </aside>
 
     <main class="flex-1 min-w-0">
@@ -47,6 +47,7 @@
           <p id="hk-weekday" class="text-xs text-slate-500">Asia/Hong_Kong</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
+          <span id="live-badge" class="rounded-full bg-slate-500/20 px-3 py-1 text-xs text-slate-300">即時待機</span>
           <span id="gh-badge" class="rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-200">未授權寫入</span>
           <button id="btn-reload" class="btn-ghost rounded-lg px-3 py-1.5 text-xs">重新載入數據</button>
           <button id="btn-monitor" class="btn-gold rounded-lg px-3 py-1.5 text-xs">觸發今日監控</button>
@@ -97,7 +98,7 @@
                 <span id="table-meta" class="ml-auto text-[11px] text-slate-500"></span>
               </div>
             </div>
-            <p id="board-legend" class="border-b border-white/5 bg-ink-900 px-4 py-2 text-[11px] text-slate-500">呢張表淨係<strong class="text-slate-300">獨贏賠率</strong>（馬會 WIN 彩池）。紅／綠／啡格跟投注盤官方顏色。</p>
+            <p id="board-legend" class="border-b border-white/5 bg-ink-900 px-4 py-2 text-[11px] text-slate-500">呢張表淨係<strong class="text-slate-300">獨贏賠率</strong>（馬會 WIN 彩池）。只標投注盤啡格；即時欄由瀏覽器直接問馬會。</p>
             <div class="max-h-[560px] overflow-auto">
               <table class="grid-table">
                 <thead id="data-head"></thead>
@@ -136,7 +137,7 @@
               </label>
               <button id="btn-correct-odds" class="btn-gold rounded-lg px-4 py-2 text-sm">寫入更正（要 PAT）</button>
             </div>
-            <p class="mt-2 text-[11px] text-slate-500">馬會唔公開歷史走勢。下一個賽日起系統會自己存每 10 秒一條路徑（連紅／綠／啡格），圖表同表都會用晒呢啲密數據。通知唔會因為啡格閃一下就出：預設要連續 20 秒。你記得邊格可以喺呢度改；開跑格亦會用官方終賠自動校正。</p>
+            <p class="mt-2 text-[11px] text-slate-500">馬會唔公開歷史走勢。下一個賽日起系統會自己存每 10 秒一條路徑（只記啡格），圖表同表都會用晒呢啲密數據。通知唔會因為啡格閃一下就出：預設要連續 20 秒。你記得邊格可以喺呢度改；開跑格亦會用官方終賠自動校正。</p>
           </article>
           <div class="grid gap-4 lg:grid-cols-3">
             <article class="kpi-card lg:col-span-2">
@@ -180,7 +181,7 @@
             <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-slate-300">
               <li>系統全日每隔大約半個鐘問馬會：「今日沙田或者跑馬地有冇賽馬？第一場幾點開跑？」冇就收工。有就跟<strong class="text-gold-300">當日官方第一場開跑時間</strong>倒數，唔係寫死 11:00／17:30。</li>
               <li>開跑前 15、10、5、1 分鐘同開跑嗰下，分別向馬會問<strong class="text-gold-300">兩個獨立彩池</strong>：獨贏（WIN）同位置（PLA）。兩個數字分開寫入兩欄，唔會撈亂。唔再抄開賽前 3 分鐘。</li>
-              <li>紅／綠／啡格：直接抄<strong class="text-gold-300">投注盤官方顏色</strong>（getJSON 第三個標記：1 紅、2 綠、3 啡）。馬會顯示為啡格先標啡格，唔再假設跌一半就係啡格。舊數據未有官方格色先用跌幅門檻。策略／通知仍然用獨贏啡格做訊號。</li>
+              <li>啡格：只抄投注盤官方標記 <strong class="text-gold-300">3</strong>。紅格／綠格／大熱唔存、唔顯示、唔當訊號。舊數據未有官方格色先用跌幅門檻。</li>
               <li>賽事完咗再抄官方名次、獨贏派彩、位置派彩（每 $10）。回測「只買位置」用嘅係呢個官方位置派彩，唔係開賽前位置賠率去估。</li>
               <li>而家表入面舊日子係<strong class="text-amber-200">示範假數據</strong>。第一次抄到真實馬會賠率／賽果嗰下，程式會<strong class="text-gold-300">刪晒全部示範列</strong>，之後回測只睇真實紀錄。</li>
             </ol>
@@ -188,7 +189,7 @@
               <summary class="cursor-pointer text-gold-300">技術細節：點樣向馬會拎賠率（唔係亂填）</summary>
               <p class="mt-2">第一步問今日有冇賽：向 <span class="mono text-slate-300">https://info.cld.hkjc.com/graphql/base/</span> 送馬會網頁用緊嗰條 GraphQL（raceMeetings）。只接受沙田 ST／跑馬地 HV。</p>
               <p class="mt-2">第二步攞中文馬名：同一條 GraphQL 入面 runners 嘅 <span class="mono">name_ch</span>。</p>
-              <p class="mt-2">第三步攞即時賠率：主通道係投注頁 <span class="mono">https://bet.hkjc.com/racing/getJSON.aspx?type=winplaodds</span>（你喺 app／投注盤見到嗰盤，連紅／綠／啡格）。回覆 <span class="mono">馬號=賠率=標記</span>：0 無色、1 紅格、2 綠格、3 啡格。GraphQL <span class="mono">oddsDropValue</span>／<span class="mono">hotFavourite</span> 做後備。</p>
+              <p class="mt-2">第三步攞即時賠率：Actions 主通道係投注頁 <span class="mono">https://bet.hkjc.com/racing/getJSON.aspx?type=winplaodds</span>。回覆 <span class="mono">馬號=賠率=標記</span>，只把標記 <span class="mono">3</span> 當啡格。網站即時欄唔經 git：瀏覽器直接 POST GraphQL（<span class="mono">Access-Control-Allow-Origin: *</span>），約 4 秒一轉。getJSON 由 github.io 開會被擋，所以免費網站用 GraphQL 先密得過。</p>
               <p class="mt-2">示範數據由 <span class="mono">scripts/generate_sample_data.py</span> 產生，只用來填滿表格；真賽日唔會用呢個產生器，而會跑上面兩條馬會通道。</p>
             </details>
           </article>
@@ -340,6 +341,7 @@
               <li>Telegram 推播另外要 repo Secret <span class="mono">TELEGRAM_BOT_TOKEN</span>；Actions 寫入權限要設成 Read and write。</li>
               <li>接近開跑先 10 秒抄一次；場次之間會慢落 60 秒。若馬會回 429／403，會自動退後再試，唔會死循環狂打。</li>
               <li>GitHub 單一 job 最長 6 小時。到大約 5 小時 30 分會自己再開下一段繼續抄，唔會無聲停。</li>
+              <li>網站即時欄唔靠 120 秒 git push：瀏覽器自己問馬會 GraphQL。存檔／回測先係 Actions 寫 CSV。</li>
             </ul>
           </article>
 
@@ -481,7 +483,7 @@
 <li>開賽前 <strong>1</strong> 分鐘</li>
 <li><strong>開跑</strong>嗰下</li>
 <li><strong>唔抄開賽前 3 分鐘。</strong></li>
-<li>開賽前 1 分鐘如果馬會投注盤顯示獨贏啡格，而且嗰刻獨贏喺 Telegram 範圍內，就即刻推播。每隻馬每場最多一條警報。紅／綠格會抄低但唔當策略訊號。</li>
+<li>開賽前 1 分鐘如果馬會投注盤顯示獨贏啡格，而且嗰刻獨贏喺 Telegram 範圍內，就即刻推播。每隻馬每場最多一條警報。紅／綠格唔會存。</li>
 </ol>
 <p>你呢段時間可以：</p>
 <ul>
@@ -491,7 +493,7 @@
 </ul>
 <h3>賽事進行中</h3>
 <p>網站唔會替你落飛。警報只係話「呢隻馬喺你定嘅規則下出現啡格」。你自己決定買獨贏、位置定兩者。</p>
-<p>數據大約每 <strong>120 秒</strong> 先 commit 上 GitHub 一次，所以網站表格可能遲一兩分鐘，但 Telegram 係抄到嗰下即刻送。</p>
+<p>時間點／走勢 CSV 大約每 <strong>120 秒</strong> 先 commit 上 GitHub 一次（git + Pages CDN 做唔到 10 秒 live）。網站<strong>即時欄</strong>唔經 git：瀏覽器每約 4 秒直接問馬會 GraphQL。Telegram 仍然係 Actions 抄到嗰下即刻送。</p>
 <p>接近開跑先 10 秒問一次馬會；隔開場次會慢到 60 秒。若被擋（429／403）會自動停一停再試。單一 Actions job 最長 6 小時，到大約 5 小時 30 分會自己再開下一段繼續抄。第一次抄到真實數據會刪晒示範假數據，之後回測只用真實場次。</p>
 <h3>最後一場完咗</h3>
 <p>監控會再等大約 <strong>25 分鐘</strong>，然後抄官方賽果（名次、獨贏派彩、位置派彩）。零晨 00:20 再補一次。</p>
@@ -508,7 +510,7 @@
 <h2>四個分頁點用</h2>
 <h3>數據中心</h3>
 <ul>
-<li><strong>獨贏賠率 / 位置賠率</strong>：一隻馬一行，欄位係開賽前 15／10／5／1 分鐘同開跑。紅／綠／啡格跟投注盤官方顏色。</li>
+<li><strong>獨贏賠率 / 位置賠率</strong>：一隻馬一行，左邊多一欄<strong>即時</strong>（瀏覽器直接問馬會），其餘係開賽前 15／10／5／1 分鐘同開跑。只標啡格。</li>
 <li><strong>只看啡格</strong>：任何時間點馬會顯示獨贏啡格。獨贏、位置、賽果派彩三張表都可以用。</li>
 <li><strong>只看開賽1分鐘前出現啡格</strong>：淨 T-1 獨贏啡格。賽果派彩表同樣適用，方便你對照嗰批馬最後派咗幾多。</li>
 <li><strong>只看符合策略</strong>：跟 <strong>策略回測</strong> 頁而家嘅設定揀馬（選定時間點嘅獨贏啡格 ∩ 獨贏賠率範圍）。獨贏、位置、賽果三張表都係同一批馬。投注方法只影響回測點計錢，唔影響呢個 filter。</li>
@@ -588,7 +590,7 @@
 <p><strong>點解表入面有舊日子但寫住示範數據？</strong><br />
 歷史示範係假數據，欄位同真 crawl 一樣。真賽日 Actions 會把真實賠率 <strong>追加</strong> 入同一個 CSV，唔會用產生器覆蓋真數。</p>
 <p><strong>點解開賽前 1 分鐘未見啡格？</strong><br />
-要嗰下投注盤真係顯示啡格（紅格／綠格唔算）。舊數據未有官方格色先睇 T-5 同 T-1 跌幅 ≥ 門檻。3 分鐘位唔會有資料。</p>
+要嗰下投注盤真係顯示啡格（紅格／綠格唔存、唔算）。舊數據未有官方格色先睇 T-5 同 T-1 跌幅 ≥ 門檻。3 分鐘位唔會有資料。</p>
 <p><strong>收到 Telegram 但網站未更新？</strong><br />
 通知即時送；CSV 最多等兩分鐘先 push。撳「重新載入數據」。</p>
 <p><strong>有賽但 job 話今日無賽？</strong><br />
@@ -621,7 +623,7 @@ scraper_runner.py auto
         │     有、全部完咗 → 抄官方賽果
         │
         ├─ 第一次真實寫入 → 刪晒示範 CSV
-        ├─ 每個時間點：投注盤 getJSON 獨贏+位置+紅／綠／啡格（失敗改 GraphQL）
+        ├─ 每個時間點：投注盤 getJSON 獨贏+位置+啡格（失敗改 GraphQL；紅／綠丟棄）
         ├─ 約每 45 秒重讀賽程：postTime 改 ≥ 2 分鐘就刪嗰場舊 checkpoint 再抄；取消／中止停抄；SCR／後備唔寫
         ├─ 延誤但未改鐘：唔當完場，延長監控最多 3 小時
         ├─ HTTP 429／403／斷線 → 退後 8–120 秒再試，之後減慢輪詢
@@ -729,7 +731,7 @@ scraper_runner.py auto
 </tbody>
 </table>
 <p>海外場地會被丟掉。</p>
-<h3>2. 即時獨贏、位置同紅／綠／啡格（主通道：投注盤）</h3>
+<h3>2. 即時獨贏、位置同啡格（主通道：投注盤）</h3>
 <p>呢條就係投注 app／bet.hkjc.com 即時盤用嘅公開 JSON，賠率同格色一齊嚟，唔使自己估 50% 先當啡格。</p>
 <pre><code>GET https://bet.hkjc.com/racing/getJSON.aspx
     ?type=winplaodds
@@ -746,7 +748,7 @@ scraper_runner.py auto
 <li>用 <code>#</code> 切開：前半獨贏，後半位置。</li>
 <li>每半邊用 <code>;</code> 切開。第一段係 <code>WIN</code> 或 <code>PLA</code> 標籤，其餘每段 <code>馬號=賠率=標記</code>。</li>
 <li><strong>第一個數字</strong> = 馬號；<strong>第二個</strong> = 賠率（寫入對應欄）。</li>
-<li><strong>第三個</strong> = 官方格色：<code>0</code> 無色、<code>1</code> 紅格／大熱、<code>2</code> 綠格、<code>3</code> 啡格。獨贏寫入 <code>hkjc_grid</code>，位置寫入 <code>place_grid</code>。<code>is_brown_grid</code> 只喺標記係 <code>3</code> 先為真。</li>
+<li><strong>第三個</strong> = 官方格色。只把 <code>3</code> 當啡格寫入 <code>hkjc_grid</code>／<code>place_grid</code>；<code>0</code>／<code>1</code> 紅／<code>2</code> 綠一律當 <code>none</code>。</li>
 <li>獨贏 map 同位置 map 分開填，最後用馬號合併成同一隻馬兩欄。</li>
 </ol>
 <p>所以「crawl 邊一格」喺呢條通道就係：<strong><code>OUT</code> 字串、<code>#</code> 前 WIN 段、<code>#</code> 後 PLA 段、每個 <code>馬號=賠率=格色</code>。</strong></p>
@@ -800,7 +802,7 @@ scraper_runner.py auto
 </tr>
 </tbody>
 </table>
-<p><code>oddsDropValue</code> 同樣係 0／1／2／3；<code>hotFavourite</code> 為真就當紅格。兩個 map 都空 → 當 getJSON 同 GraphQL 都失敗，唔會把空白當真實賠率。馬名用第 1 步已經備好嘅 <code>name_ch</code>。</p>
+<p><code>oddsDropValue == 3</code> 先當啡格；<code>hotFavourite</code>／紅／綠唔存。兩個 map 都空 → 當 getJSON 同 GraphQL 都失敗，唔會把空白當真實賠率。馬名用第 1 步已經備好嘅 <code>name_ch</code>。</p>
 <h3>4. 官方賽果同派彩</h3>
 <p>主通道係中文賽果頁（用瀏覽器打開就係你平日睇派彩嗰版）：</p>
 <pre><code>GET https://racing.hkjc.com/racing/information/Chinese/Racing/LocalResults.aspx
@@ -896,7 +898,7 @@ scraper_runner.py auto
 <tr>
 <td><code>commit_every_seconds</code></td>
 <td><code>120</code></td>
-<td>幾耐先 git push 一次</td>
+<td>幾耐先 git push 一次（存檔用；網站即時欄唔經呢條）</td>
 </tr>
 <tr>
 <td><code>brown_grid_drop_pct</code></td>
@@ -905,6 +907,8 @@ scraper_runner.py auto
 </tr>
 </tbody>
 </table>
+<p>免費 GitHub Pages <strong>唔係</strong> live server。每次改 CSV 都要 git commit + Pages 重建／CDN，所以 120 秒係存檔節奏，唔係畫面節奏。以前 iPhone monitor 之所以密，幾乎肯定係部機自己問馬會。</p>
+<p>免費情況下最密嘅做法：瀏覽器直接 POST <code>https://info.cld.hkjc.com/graphql/base/</code>（CORS <code>*</code>，約 4 秒）；<code>getJSON</code> 由 github.io 開會被擋，只留俾 Actions 10 秒存檔；git push CSV 仍然約 120 秒。</p>
 <p>每一場開跑時間 <code>postTime</code> 減而家香港時間 = 仲有幾多分鐘。窗口只喺<strong>該鐘點當刻或之後</strong>先開，唔會提早 30–45 秒定格：</p>
 <table>
 <thead>
@@ -918,7 +922,7 @@ scraper_runner.py auto
 <tr>
 <td>T-15</td>
 <td>15.0–13.5 分鐘</td>
-<td>嗰下投注盤官方紅／綠／啡</td>
+<td>嗰下投注盤官方啡格（紅／綠丟棄）</td>
 </tr>
 <tr>
 <td>T-10</td>
@@ -954,7 +958,7 @@ scraper_runner.py auto
 <hr />
 <h2>四、點樣「分析」</h2>
 <h3>啡格（跟馬會顯示，唔係自己估 50%）</h3>
-<p>新數據：<code>hkjc_grid == brown</code>（getJSON 標記 <code>3</code>，或者 GraphQL <code>oddsDropValue == 3</code>）先當啡格。紅格、綠格會顯示，但策略／Telegram 唔當訊號。</p>
+<p>新數據：<code>hkjc_grid == brown</code>（getJSON 標記 <code>3</code>，或者 GraphQL <code>oddsDropValue == 3</code>）先當啡格。紅格、綠格唔會寫入。</p>
 <p>舊數據未有 <code>hkjc_grid</code>：先用跌幅門檻（預設 50%），方便示範同歷史列仍然睇到急跌。</p>
 <pre><code>跌幅% = (上一時間點獨贏 − 呢個時間點獨贏) / 上一時間點獨贏 × 100   ← 只係參考
 啡格 = 馬會顯示啡格；冇官方格色先用 跌幅 ≥ 門檻
@@ -1081,8 +1085,9 @@ scraper_runner.py auto
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <script src="./assets/core.js?v=20261119c"></script>
-  <script src="./assets/engine.js?v=20261119c"></script>
-  <script src="./assets/app.js?v=20261119c"></script>
+  <script src="./assets/core.js?v=20261119d"></script>
+  <script src="./assets/engine.js?v=20261119d"></script>
+  <script src="./assets/hkjc-live.js?v=20261119d"></script>
+  <script src="./assets/app.js?v=20261119d"></script>
 </body>
 </html>

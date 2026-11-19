@@ -47,17 +47,18 @@ GRID_RED = "red"
 GRID_GREEN = "green"
 GRID_BROWN = "brown"
 
+# Only 啡格 is kept. Official 1/紅 and 2/綠 are stored as none.
 _GRID_ALIASES = {
     "0": GRID_NONE,
     "none": GRID_NONE,
     "n": GRID_NONE,
     "-": GRID_NONE,
-    "1": GRID_RED,
-    "red": GRID_RED,
-    "hot": GRID_RED,
-    "hotfavourite": GRID_RED,
-    "2": GRID_GREEN,
-    "green": GRID_GREEN,
+    "1": GRID_NONE,
+    "red": GRID_NONE,
+    "hot": GRID_NONE,
+    "hotfavourite": GRID_NONE,
+    "2": GRID_NONE,
+    "green": GRID_NONE,
     "3": GRID_BROWN,
     "brown": GRID_BROWN,
     "coffee": GRID_BROWN,
@@ -65,16 +66,16 @@ _GRID_ALIASES = {
 
 
 def parse_hkjc_grid(value) -> str:
-    """Official HKJC board colour from getJSON's third field or GraphQL oddsDropValue.
+    """Official HKJC board colour, collapsed to brown vs not-brown.
 
-    Live `馬號=賠率=標記` codes: 0 none, 1 紅格/大熱, 2 綠格, 3 啡格.
-    Empty / unknown → "" so callers can fall back to the drop heuristic for
-    historical rows that never stored a grid.
+    Live `馬號=賠率=標記` codes: 0 none, 1 紅格, 2 綠格, 3 啡格.
+    We only keep 3/brown. 紅/綠/大熱 map to none. Empty / unknown → "" so
+    callers can fall back to the drop heuristic for historical rows.
     """
     if value is None or value is False:
         return ""
     if value is True:
-        return GRID_RED
+        return GRID_NONE
     text = str(value).strip().lower()
     if text in {"", "null", "nan"}:
         return ""
@@ -84,7 +85,17 @@ def parse_hkjc_grid(value) -> str:
         number = int(float(text))
     except ValueError:
         return ""
-    return {0: GRID_NONE, 1: GRID_RED, 2: GRID_GREEN, 3: GRID_BROWN}.get(number, "")
+    return {0: GRID_NONE, 1: GRID_NONE, 2: GRID_NONE, 3: GRID_BROWN}.get(number, "")
+
+
+def stored_grid(value) -> str:
+    """Value written to CSV: brown, none, or blank if the source had no colour."""
+    colour = parse_hkjc_grid(value)
+    if colour == GRID_BROWN:
+        return GRID_BROWN
+    if colour == GRID_NONE:
+        return GRID_NONE
+    return ""
 
 
 def official_brown(

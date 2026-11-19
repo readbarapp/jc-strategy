@@ -48,6 +48,10 @@
     noticeKind: "info",
     page: 1,
     tableSource: "win",
+    liveRows: [],
+    liveFetchedAt: "",
+    liveError: "",
+    liveDelay: 4000,
     guideKind: "user",
     chart: null,
     pathChart: null,
@@ -119,6 +123,7 @@
     const now = new Date();
     $("hk-clock").textContent = formatHk(now);
     $("hk-weekday").textContent = `星期${weekdayZh(now)} · Asia/Hong_Kong`;
+    renderLiveBadge();
   }
 
   function showTab(id) {
@@ -224,9 +229,10 @@
     el.className = live
       ? "rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
       : "rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100";
-    el.textContent = live
+    const overlay = " 即時欄由你部機直接問馬會 GraphQL（CORS *，約 4 秒一轉），唔使等 git push。時間點／走勢 CSV 仍然約 2 分鐘先上 GitHub Pages。";
+    el.textContent = (live
       ? "數據來源：真實馬會紀錄。示範假數據已喺第一次成功 crawl 時全部刪除，策略回測只用真實場次。"
-      : "數據來源：示範假數據。等星期三（或任何真賽日）第一次抄到馬會賠率／賽果，就會自動刪晒呢批示範，之後只顯示真實紀錄。";
+      : "數據來源：示範假數據。等星期三（或任何真賽日）第一次抄到馬會賠率／賽果，就會自動刪晒呢批示範，之後只顯示真實紀錄。") + overlay;
   }
 
   function updateGhBadge() {
@@ -238,8 +244,9 @@
   }
 
   function fillFilterOptions() {
-    const dates = [...new Set(state.odds.map((r) => r.race_date).filter(Boolean))].sort().reverse();
-    const races = [...new Set(state.odds.map((r) => String(r.race_no)).filter(Boolean))].sort(
+    const rows = (state.odds || []).concat(state.liveRows || []);
+    const dates = [...new Set(rows.map((r) => r.race_date).filter(Boolean))].sort().reverse();
+    const races = [...new Set(rows.map((r) => String(r.race_no)).filter(Boolean))].sort(
       (a, b) => Number(a) - Number(b)
     );
     setOptions($("filter-date"), dates, "全部日期");
@@ -288,10 +295,14 @@
     return map;
   }
 
+  function liveGridOf(row) {
+    return window.HKJCEngine.parseHkjcGrid(row && row.live_grid);
+  }
+
   function brownFlags(row, lookup) {
     if (state.tableSource !== "results") {
       return {
-        any: isTrue(row.is_brown_grid) || !!row.brown_at,
+        any: isTrue(row.is_brown_grid) || !!row.brown_at || liveGridOf(row) === "brown",
         t1: isTrue(row.brown_t1),
       };
     }
@@ -367,7 +378,7 @@
     const brown = !!( $("filter-brown") && $("filter-brown").checked );
     const brownT1 = !!( $("filter-brown-t1") && $("filter-brown-t1").checked );
     const strategyOnly = strategyFilterOn();
-    const src = state.tableSource === "results" ? state.results : oddsBoard(state.tableSource);
+    const src = state.tableSource === "results" ? state.results : withLiveOdds(oddsBoard(state.tableSource));
     const lookup = brown || brownT1 ? winBrownLookup() : null;
     const strategyKeys = strategyOnly ? strategyMatchKeys() : null;
     return src.filter((row) => {
@@ -393,16 +404,12 @@
   function gridLabel(value) {
     const grid = window.HKJCEngine.parseHkjcGrid(value);
     if (grid === "brown") return "啡";
-    if (grid === "red") return "紅";
-    if (grid === "green") return "綠";
     return "—";
   }
 
   function gridCellClass(value, brownFlag) {
     const grid = window.HKJCEngine.parseHkjcGrid(value);
     if (grid === "brown") return "cell-brown";
-    if (grid === "red") return "cell-red";
-    if (grid === "green") return "cell-green";
     return brownFlag ? "cell-brown" : "";
   }
 
@@ -500,8 +507,6 @@
 
   function gridStroke(grid) {
     if (grid === "brown") return "#d97706";
-    if (grid === "red") return "#f87171";
-    if (grid === "green") return "#4ade80";
     return "#e4c36a";
   }
 
@@ -516,9 +521,7 @@
       if (need <= 0 || hold >= need) return `開賽前 1 分鐘投注盤顯示啡格，${heldTxt}（門檻 ${need}s）→ 會當訊號。`;
       return `開賽前 1 分鐘投注盤顯示啡格，但只係 ${heldTxt}（門檻 ${need}s）→ 當閃過，唔發通知。`;
     }
-    if (grid === "red") return "開賽前 1 分鐘投注盤顯示紅格。紅格唔當啡格訊號。";
-    if (grid === "green") return "開賽前 1 分鐘投注盤顯示綠格。綠格唔當啡格訊號。";
-    return "開賽前 1 分鐘投注盤冇啡格。之前閃過啡格都唔會通知，除非你揀嘅時間點當刻仍然係啡格而且夠持續。";
+    return "開賽前 1 分鐘投注盤冇啡格。紅格／綠格唔會存。之前閃過啡格都唔會通知，除非你揀嘅時間點當刻仍然係啡格而且夠持續。";
   }
 
   function drawHorsePath(ticks, byCp) {
@@ -599,7 +602,7 @@
               },
               label: (item) => {
                 const p = item.raw || {};
-                const g = p.grid === "brown" ? "啡格" : p.grid === "red" ? "紅格" : p.grid === "green" ? "綠格" : "無色";
+                const g = p.grid === "brown" ? "啡格" : "無啡格";
                 return "獨贏 " + Number(p.y).toFixed(1) + " · " + g;
               },
             },
@@ -683,6 +686,41 @@
     }
   }
 
+  function withLiveOdds(rows) {
+    const liveRows = state.liveRows || [];
+    if (!liveRows.length) return rows;
+    const out = (rows || []).map((row) => ({ ...row }));
+    const map = new Map(out.map((row) => [horseKey(row), row]));
+    const extras = [];
+    for (const live of liveRows) {
+      const key = horseKey(live);
+      const existing = map.get(key);
+      const odds = state.tableSource === "place" ? live.place_odds : live.win_odds;
+      const grid = state.tableSource === "place" ? live.place_grid : live.hkjc_grid;
+      if (existing) {
+        existing.live_odds = odds;
+        existing.live_grid = grid;
+        continue;
+      }
+      const next = {
+        race_date: live.race_date,
+        venue: live.venue,
+        race_no: live.race_no,
+        scheduled_time: "",
+        horse_no: live.horse_no,
+        horse_name: live.horse_name,
+        live_odds: odds,
+        live_grid: grid,
+        live_only: true,
+        is_brown_grid: grid === "brown" ? "true" : "false",
+        brown_at: grid === "brown" ? "即時" : "",
+      };
+      map.set(key, next);
+      extras.push(next);
+    }
+    return extras.concat(out);
+  }
+
   function renderDataTable() {
     let rows;
     try {
@@ -739,20 +777,25 @@
       }
     } else {
       const poolName = state.tableSource === "place" ? "位置賠率" : "獨贏賠率";
+      const liveNote = state.liveFetchedAt
+        ? ` · 即時 ${liveAgeLabel()}`
+        : (state.liveError ? ` · 即時 ${state.liveError}` : "");
       $("table-meta").textContent =
-        `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 格色跟馬會紅／綠／啡格` +
+        `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 只標馬會啡格` +
+        liveNote +
         (strategyFilterOn() ? ` · 符合策略 ${strategySettingLabel()}` : "");
       if ($("board-legend")) {
         const base =
           state.tableSource === "place"
-            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。紅／綠／啡格直接抄投注盤官方顏色，唔係我哋用 50% 自己估。揀馬仍然用獨贏啡格。"
-            : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。紅／綠／啡格直接抄投注盤官方顏色；馬會顯示為啡格先標啡格。舊數據未有官方格色先用跌幅門檻。";
+            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。只標<strong class=\"text-amber-200\">啡格</strong>；紅／綠唔存。即時欄由瀏覽器直接問馬會 GraphQL（約 4 秒），唔經 git。"
+            : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。只標<strong class=\"text-amber-200\">啡格</strong>（標記 3）；紅／綠當無色。即時欄由瀏覽器直接問馬會（約 4 秒），時間點／走勢仍然靠 Actions 存檔。";
         const note = strategyLegendNote();
         $("board-legend").innerHTML = note ? base + " " + note : base;
       }
-      const oddsColspan = 6 + ODDS_BOARD_COLS.length + 1;
+      const oddsColspan = 7 + ODDS_BOARD_COLS.length + 1;
       $("data-head").innerHTML = `<tr>
         <th>日期</th><th>場地</th><th>場次</th><th>開跑</th><th>馬號</th><th>馬名</th>
+        <th>即時</th>
         ${ODDS_BOARD_COLS.map((c) => `<th>${c.label}</th>`).join("")}
         <th>啡格時間點</th>
       </tr>`;
@@ -762,6 +805,7 @@
       } else {
         $("data-body").innerHTML = slice
           .map((row) => {
+            const liveTd = `<td class="${gridCellClass(row.live_grid)}">${row.live_odds == null || row.live_odds === "" ? "—" : fmtOdds(row.live_odds)}</td>`;
             const cells = ODDS_BOARD_COLS.map((c) => {
               const brown = c.brownKey && isTrue(row[c.brownKey]);
               return `<td class="${gridCellClass(row[c.gridKey], brown)}">${fmtOdds(row[c.key])}</td>`;
@@ -776,7 +820,7 @@
               <td>${row.scheduled_time || "—"}</td>
               <td>${row.horse_no}</td>
               <td>${row.horse_name || "—"}</td>
-              ${cells}${flag}
+              ${liveTd}${cells}${flag}
             </tr>`;
           })
           .join("");
@@ -1137,6 +1181,103 @@
       `⏰ ${cp}  ·  獨贏範圍 ${lo}–${hi}  ·  跌幅 ≥ ${drop}%`;
   }
 
+  function hkDate() {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Hong_Kong",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  }
+
+  function liveAgeLabel() {
+    if (!state.liveFetchedAt) return "未連";
+    const age = Math.max(0, Math.round((Date.now() - Date.parse(state.liveFetchedAt)) / 1000));
+    return age < 2 ? "剛剛" : age + " 秒前";
+  }
+
+  function renderLiveBadge() {
+    const el = $("live-badge");
+    if (!el) return;
+    if (state.liveError) {
+      el.textContent = "即時 · " + state.liveError;
+      el.className = "rounded-full bg-rose-500/15 px-3 py-1 text-xs text-rose-200";
+      return;
+    }
+    if (state.liveRows && state.liveRows.length) {
+      const raceNos = [...new Set(state.liveRows.map((r) => r.race_no))].join("/");
+      el.textContent = `即時 第${raceNos}場 · ${liveAgeLabel()}`;
+      el.className = "rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-200";
+      return;
+    }
+    el.textContent = "即時待機";
+    el.className = "rounded-full bg-slate-500/20 px-3 py-1 text-xs text-slate-300";
+  }
+
+  function liveVenueGuess() {
+    const st = state.status || {};
+    if (st.venue) return String(st.venue).toUpperCase();
+    const today = String(st.race_date || hkDate());
+    const hit = (state.odds || []).find((row) => String(row.race_date) === today && row.venue);
+    return hit ? String(hit.venue).toUpperCase() : "ST";
+  }
+
+  async function pollHkjcLive() {
+    if (document.hidden) return;
+    if (!window.HKJCLive || typeof window.HKJCLive.fetchLiveBoard !== "function") return;
+    const st = state.status || {};
+    const date = String(st.race_date || hkDate());
+    try {
+      let board = await window.HKJCLive.fetchLiveBoard(date, liveVenueGuess());
+      if ((!board || !board.rows || !board.rows.length) && liveVenueGuess() === "ST") {
+        board = await window.HKJCLive.fetchLiveBoard(date, "HV");
+      }
+      state.liveRows = (board && board.rows) || [];
+      state.liveFetchedAt = (board && board.fetched_at) || new Date().toISOString();
+      state.liveError = state.liveRows.length ? "" : (board && board.error) || "未有即時盤";
+      state.liveDelay = 4000;
+      fillFilterOptions();
+      if (state.tab === "data") renderDataTable();
+      else renderLiveBadge();
+    } catch (err) {
+      state.liveError = String(err && err.message ? err.message : err).slice(0, 80);
+      state.liveDelay = Math.min((state.liveDelay || 4000) * 1.5, 20000);
+      renderLiveBadge();
+    }
+  }
+
+  async function refreshArchiveQuiet() {
+    if (document.hidden) return;
+    const g = state.github;
+    try {
+      const [oddsText, statusText, tickText] = await Promise.all([
+        loadRelativeOrRaw(g, "./data/odds_snapshots.csv", "data/odds_snapshots.csv"),
+        loadRelativeOrRaw(g, "./status.json", "status.json").catch(() => "{}"),
+        loadRelativeOrRaw(g, "./data/odds_ticks.csv", "data/odds_ticks.csv").catch(() => ""),
+      ]);
+      state.odds = parseCsv(oddsText);
+      state.ticks = tickText ? parseCsv(tickText) : [];
+      state.status = JSON.parse(statusText || "{}");
+      if (state.tab === "data") renderDataTable();
+      if (state.tab === "status") renderStatus();
+    } catch {
+      /* keep last good archive */
+    }
+  }
+
+  function startLiveLoop() {
+    if (state.liveTimer) return;
+    const tick = async () => {
+      await pollHkjcLive();
+      state.liveTimer = setTimeout(tick, state.liveDelay || 4000);
+    };
+    tick();
+    if (!state.archiveTimer) state.archiveTimer = setInterval(refreshArchiveQuiet, 30000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) pollHkjcLive();
+    });
+  }
+
   function bind() {
     document.querySelectorAll("[data-tab]").forEach((btn) => {
       btn.addEventListener("click", () => showTab(btn.getAttribute("data-tab")));
@@ -1273,6 +1414,7 @@
     tickClock();
     setInterval(tickClock, 1000);
     showTab("data");
+    startLiveLoop();
     loadAll();
   });
 })();

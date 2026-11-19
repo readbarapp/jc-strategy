@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.csv_store import copy_to_docs, rebuild_odds_board, set_dataset_origin, write_rows  # noqa: E402
-from src.odds_math import GRID_BROWN, GRID_NONE, GRID_RED, is_brown_grid, win_drop_pct  # noqa: E402
+from src.odds_math import GRID_BROWN, GRID_NONE, is_brown_grid, win_drop_pct  # noqa: E402
 from src.schema import ODDS_FIELDS, RESULTS_FIELDS  # noqa: E402
 from src.timeutil import combine_hk  # noqa: E402
 
@@ -140,11 +140,8 @@ def generate(seed: int = 20261116) -> None:
                     win = path[cp_i][horse_i]
                     prev = path[cp_i - 1][horse_i] if cp_i else win
                     drop = win_drop_pct(prev, win)
-                    favourite = min(range(field), key=lambda idx: path[cp_i][idx])
                     if is_brown_grid(drop, THRESHOLD):
                         grid = GRID_BROWN
-                    elif horse_i == favourite:
-                        grid = GRID_RED
                     else:
                         grid = GRID_NONE
                     odds_rows.append(
