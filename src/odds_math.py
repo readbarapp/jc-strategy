@@ -48,17 +48,28 @@ def match_checkpoint(
 ) -> str | None:
     """Map minutes-to-post onto a named checkpoint.
 
-    Each checkpoint only matches a short window around itself (about ±1.5 min),
-    so a 4-minute gap such as T-5 → T-1 is not filled by capturing at T-3.
-    Returns None outside those windows.
+    Each T-n opens at the exact minute (or at post for T-0), never before.
+    The previous +0.75 early window froze T-0 ~30s before the off, missing
+    last-second steam (e.g. 11.0 captured vs official SP 5.9).
     """
     points = sorted((int(x) for x in (checkpoints or DEFAULT_CHECKPOINTS)), reverse=True)
-    if minutes_to_post > points[0] + 1.5:
+    if not points:
+        return None
+    if minutes_to_post > points[0]:
         return None
     extended = points + [points[-1] - 30]
     for high, low in zip(extended[:-1], extended[1:]):
-        upper = high + 0.75
-        lower = max(high - 1.5, (high + low) / 2.0)
+        if high == 0:
+            upper = 0.0
+            lower = -1.5
+        else:
+            upper = float(high)
+            lower = max(high - 1.5, (high + low) / 2.0)
         if lower < minutes_to_post <= upper:
             return checkpoint_label(high)
     return None
+
+
+def checkpoint_allows_refresh(checkpoint: str, minutes_to_post: float) -> bool:
+    """T-0 keeps overwriting until shortly after post so closing SP replaces the first tick."""
+    return str(checkpoint or "").upper() == "T-0" and -1.5 < float(minutes_to_post) <= 0.0

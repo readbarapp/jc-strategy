@@ -499,6 +499,8 @@
 <p>只認沙田 <code>ST</code>、跑馬地 <code>HV</code>。海外或場外投注日唔會監控。可以喺 Actions 手動跑 <code>monitor</code> 並填日期 <code>YYYY-MM-DD</code>。</p>
 <p><strong>回測「只買位置」係咪用開賽前位置賠率？</strong>  </p>
 <p>唔係。揀馬用獨贏啡格；結算用官方位置派彩。</p>
+<p><strong>點解開跑賠率同馬會睇到嘅唔同（例如天天更好 11.0 vs 5.9）？</strong>  </p>
+<p>舊版 T-0 窗口會喺開跑前約 30 秒就定格，最後幾十秒大熱抄唔到。而家要等到開跑當刻先抄，並且用賽果表官方獨贏賠率（SP）校正 T-0。位置派彩亦只認「位置」，唔會誤抄「位置Q」。</p>
             </div>
           </article>
           <article id="guide-panel-pipeline" class="kpi-card hidden">
@@ -623,16 +625,16 @@ scraper_runner.py auto
 <tr><td><code>commit_every_seconds</code></td><td><code>120</code></td><td>幾耐先 git push 一次</td></tr>
 <tr><td><code>brown_grid_drop_pct</code></td><td><code>50</code></td><td>啡格跌幅門檻</td></tr>
 </tbody></table>
-<p>每一場開跑時間 <code>postTime</code> 減而家香港時間 = 仲有幾多分鐘。對落窗口（大約該鐘點 ±1.5 分鐘內先算數）：</p>
+<p>每一場開跑時間 <code>postTime</code> 減而家香港時間 = 仲有幾多分鐘。窗口只喺<strong>該鐘點當刻或之後</strong>先開，唔會提早 30–45 秒定格：</p>
 <table><thead><tr><th>標籤</th><th>大約窗口</th><th>啡格同邊個比</th></tr></thead><tbody>
-<tr><td>T-15</td><td>15.75–13.5 分鐘</td><td>（第一筆，無比）</td></tr>
-<tr><td>T-10</td><td>10.75–8.5</td><td>T-15（約 5 分鐘前）</td></tr>
-<tr><td>T-5</td><td>5.75–3.5</td><td>T-10</td></tr>
+<tr><td>T-15</td><td>15.0–13.5 分鐘</td><td>（第一筆，無比）</td></tr>
+<tr><td>T-10</td><td>10.0–8.5</td><td>T-15（約 5 分鐘前）</td></tr>
+<tr><td>T-5</td><td>5.0–3.5</td><td>T-10</td></tr>
 <tr><td>（3 分鐘）</td><td><strong>唔抄</strong></td><td>—</td></tr>
-<tr><td>T-1</td><td>1.75–0.5</td><td><strong>T-5（約 4–5 分鐘前）</strong></td></tr>
-<tr><td>T-0</td><td>0.75 至開跑後約 1.5 分鐘</td><td>T-1</td></tr>
+<tr><td>T-1</td><td>1.0–0.5</td><td><strong>T-5（約 4–5 分鐘前）</strong></td></tr>
+<tr><td>T-0</td><td>開跑當刻至開跑後約 1.5 分鐘（期間覆寫到最後一盤）</td><td>T-1</td></tr>
 </tbody></table>
-<p>每隻馬每個標籤只寫 <strong>一次</strong>。10 秒一跳嘅中間數唔存，所以啡格唔會被秒速跳動洗淡。</p>
+<p>T-15…T-1 每隻馬每個標籤寫 <strong>一次</strong>（剛到達該鐘點嗰下）。T-0 會一直覆寫到收秤；官方賽果入嚟之後再用賽果表「獨贏賠率」（SP）校正，避免最後幾十秒大熱被提早定格。</p>
 <p>寫入長表 <code>data/odds_snapshots.csv</code> 一列嘅欄：</p>
 <p><code>race_date, venue, race_no, scheduled_time, checkpoint, capture_timestamp, horse_no, horse_name, win_odds, place_odds, prev_win_odds, win_drop_pct, is_brown_grid</code></p>
 <p>之後 pivot 成寬表 <code>win_board.csv</code> / <code>place_board.csv</code>（一馬一行，T-15…T-0 各一欄）。網站下載鈕匯出嘅就係呢種寬表。<code>odds_board.csv</code> 係獨贏寬表別名。</p>

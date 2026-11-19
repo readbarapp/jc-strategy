@@ -12,7 +12,14 @@ from . import csv_store, gitops, telegram_notify
 from .config import brown_grid_threshold, load_config, scrape_interval
 from .hkjc_client import HKJCClient, Meeting
 from .logger import log, log_exception
-from .odds_math import DEFAULT_CHECKPOINTS, is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
+from .odds_math import (
+    DEFAULT_CHECKPOINTS,
+    checkpoint_allows_refresh,
+    is_brown_grid,
+    match_checkpoint,
+    parse_odds,
+    win_drop_pct,
+)
 from .race_events import (
     KEEP_ALIVE_MINUTES,
     MAX_DELAY_EXTEND_MINUTES,
@@ -67,6 +74,7 @@ def restore_monitor_state(meeting: Meeting) -> tuple[dict[tuple[int, int], float
             CHECKPOINT_ORDER.get(str(row.get("checkpoint") or ""), 99),
         )
     )
+    by_horse: dict[tuple[int, int], dict[str, float]] = {}
     for row in rows:
         try:
             race_no = int(float(row.get("race_no") or 0))
@@ -79,7 +87,16 @@ def restore_monitor_state(meeting: Meeting) -> tuple[dict[tuple[int, int], float
         captured.add((race_no, horse_no, checkpoint))
         win = parse_odds(row.get("win_odds"))
         if win is not None:
-            checkpoint_odds[(race_no, horse_no)] = win
+            by_horse.setdefault((race_no, horse_no), {})[checkpoint] = win
+    for key, cps in by_horse.items():
+        if "T-0" in cps and "T-1" in cps:
+            checkpoint_odds[key] = cps["T-1"]
+            continue
+        sequence = [cps[name] for name in ("T-15", "T-10", "T-5", "T-1", "T-0") if name in cps]
+        if len(sequence) >= 2:
+            checkpoint_odds[key] = sequence[-2]
+        elif sequence:
+            checkpoint_odds[key] = sequence[-1]
     if captured:
         log(f"Restored {len(captured)} captured checkpoints from CSV for continuation")
     return checkpoint_odds, captured, alerted
@@ -154,7 +171,7 @@ def refresh_meeting_schedule(
     return latest, False
 
 
-def collect_results(client: HKJCClient, meeting: Meeting) -> int:
+def collect_results(client: HKJCClient, meeting: Meeting, threshold: float = 50.0) -> int:
     all_rows: list[dict] = []
     for race in meeting.races:
         if is_race_off(race.status) or is_meeting_off(meeting.status):
@@ -172,6 +189,7 @@ def collect_results(client: HKJCClient, meeting: Meeting) -> int:
     if not all_rows:
         return 0
     added = csv_store.upsert_results(all_rows)
+    csv_store.apply_official_sp(all_rows, threshold)
     csv_store.copy_to_docs()
     return added
 
@@ -222,12 +240,15 @@ def snapshot_race(
         if not should_write_runner(status, win):
             continue
         ck = (race.race_no, runner.horse_no, checkpoint)
-        if ck in captured:
+        minutes_now = minutes if post else 0.0
+        refreshing = ck in captured and checkpoint_allows_refresh(checkpoint, minutes_now)
+        if ck in captured and not refreshing:
             continue
         prev = checkpoint_odds.get(key)
         drop = win_drop_pct(prev, win) if prev is not None else 0.0
         brown = is_brown_grid(drop, threshold)
-        checkpoint_odds[key] = win
+        if checkpoint != "T-0":
+            checkpoint_odds[key] = win
         captured.add(ck)
         row = {
             "race_date": meeting.race_date,
@@ -402,7 +423,7 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
         time.sleep(client.recommended_sleep(sleep_for))
 
     log("Odds loop finished — harvesting official results")
-    collect_results(client, meeting)
+    collect_results(client, meeting, brown_grid_threshold(cfg))
     write_status(
         state="idle",
         is_race_day=True,
@@ -457,7 +478,7 @@ def run_results(cfg: dict[str, Any] | None = None, race_date: str | None = None)
         write_status(state="idle", is_race_day=False, last_message="無賽果可收")
         gitops.persist_and_push()
         return "idle"
-    added = collect_results(client, meeting)
+    added = collect_results(client, meeting, brown_grid_threshold(cfg))
     write_status(
         state="idle",
         is_race_day=True,

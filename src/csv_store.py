@@ -9,6 +9,7 @@ from typing import Iterable
 
 from .logger import log
 from .odds_board import WIDE_FIELDS, pivot_odds
+from .odds_math import is_brown_grid, parse_odds, win_drop_pct
 from .schema import ODDS_FIELDS, RESULTS_FIELDS
 from .timeutil import iso_hk, now_hk
 
@@ -203,6 +204,51 @@ def drop_horse_odds(race_date: str, venue: str, race_no, horse_no) -> int:
         rebuild_odds_board()
         log(f"Dropped {removed} odds rows for scratched {race_date} {venue} R{race_no} #{horse_no}")
     return removed
+
+
+def apply_official_sp(results: list[dict], threshold: float = 50.0) -> int:
+    """Replace T-0 win odds with official 獨贏賠率 (SP) and recompute 啡格 vs T-1."""
+    if not results:
+        return 0
+    sp_map: dict[tuple, float] = {}
+    for row in results:
+        sp = parse_odds(row.get("final_sp"))
+        if sp is None:
+            continue
+        sp_map[_key_result(row)] = sp
+    if not sp_map:
+        return 0
+    odds = load_odds()
+    t1: dict[tuple, float] = {}
+    for row in odds:
+        if str(row.get("checkpoint") or "").upper() != "T-1":
+            continue
+        win = parse_odds(row.get("win_odds"))
+        if win is not None:
+            t1[_key_result(row)] = win
+    changed = 0
+    updated: list[dict] = []
+    for row in odds:
+        key = _key_result(row)
+        if str(row.get("checkpoint") or "").upper() != "T-0" or key not in sp_map:
+            updated.append(row)
+            continue
+        sp = sp_map[key]
+        prev = t1.get(key)
+        drop = win_drop_pct(prev, sp) if prev is not None else 0.0
+        new = dict(row)
+        new["win_odds"] = sp
+        new["prev_win_odds"] = "" if prev is None else prev
+        new["win_drop_pct"] = drop
+        new["is_brown_grid"] = "true" if is_brown_grid(drop, threshold) else "false"
+        if parse_odds(row.get("win_odds")) != sp:
+            changed += 1
+        updated.append(new)
+    if changed:
+        write_rows(ODDS_PATH, ODDS_FIELDS, updated)
+        rebuild_odds_board(threshold)
+        log(f"Backfilled {changed} T-0 rows from official SP")
+    return changed
 
 
 def drop_date(race_date: str) -> tuple[int, int]:

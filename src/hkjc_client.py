@@ -815,14 +815,18 @@ class HKJCClient:
         header_lower = [h.lower() for h in header_names]
 
         def col(*names: str) -> int | None:
+            def compact(value: str) -> str:
+                return re.sub(r"\s+", "", value or "").lower()
+
+            wanted = [compact(name) for name in names if name]
             for i, h in enumerate(header_names):
-                for name in names:
-                    if name and name in h:
-                        return i
+                hc = compact(h)
+                if any(token and token in hc for token in wanted):
+                    return i
             for i, h in enumerate(header_lower):
-                for name in names:
-                    if name and name.lower() in h:
-                        return i
+                hc = compact(h)
+                if any(token and token in hc for token in wanted):
+                    return i
             return None
 
         idx_pla = col("名次", "pla.")
@@ -898,25 +902,27 @@ class HKJCClient:
             cells = [c.get_text(" ", strip=True) for c in tr.find_all(["td", "th"])]
             if not cells:
                 continue
-            joined = " ".join(cells).upper()
-            if "WIN" in cells[0].upper() or cells[0] in {"獨贏"}:
+            label = re.sub(r"\s+", "", cells[0] or "")
+            upper = label.upper()
+            if label in {"獨贏"} or upper == "WIN":
                 current_pool = "WIN"
-            elif "PLACE" in cells[0].upper() or cells[0] in {"位置"}:
+            elif label in {"位置"} or upper == "PLACE":
                 current_pool = "PLA"
+            elif label:
+                # 位置Q / 連贏 / 二重彩… must not reuse 位置 horse numbers
+                current_pool = ""
             numbers = [int(x) for x in re.findall(r"\b(\d{1,2})\b", " ".join(cells))]
             money = re.findall(r"\$?\s*([0-9]+\.[0-9]+)", " ".join(cells))
             if current_pool == "WIN" and numbers and money:
                 win_div[numbers[0]] = float(money[0])
             elif current_pool == "PLA":
-                # pairs of horse / dividend walking the row
-                if len(cells) >= 3:
-                    n = self._to_int(cells[1] if len(cells) > 1 else cells[0])
-                    divs = re.findall(r"([0-9]+\.[0-9]+)", cells[-1] if cells else "")
-                    if n and divs:
-                        pla_div[n] = float(divs[0])
+                n = self._to_int(cells[1] if len(cells) > 1 else cells[0])
+                divs = re.findall(r"([0-9]+\.[0-9]+)", cells[-1] if cells else "")
+                if n and divs:
+                    pla_div[n] = float(divs[0])
                 elif numbers and money:
-                    for n, m in zip(numbers, money):
-                        pla_div[n] = float(m)
+                    for horse_no, amount in zip(numbers, money):
+                        pla_div[horse_no] = float(amount)
         return win_div, pla_div
 
     @staticmethod
