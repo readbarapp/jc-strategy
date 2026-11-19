@@ -32,7 +32,75 @@ def win_drop_pct(prev_win_odds, win_odds) -> float:
 
 
 def is_brown_grid(drop_pct: float, threshold: float) -> bool:
+    """Legacy 啡格 heuristic: drop vs the previous checkpoint ≥ threshold.
+
+    New snapshots store HKJC's own board colour in `hkjc_grid`. Use
+    `official_brown` so strategy / display follow the betting app, not this
+    50% assumption, whenever that colour is known.
+    """
     return float(drop_pct) >= float(threshold)
+
+
+GRID_NONE = "none"
+GRID_RED = "red"
+GRID_GREEN = "green"
+GRID_BROWN = "brown"
+
+_GRID_ALIASES = {
+    "0": GRID_NONE,
+    "none": GRID_NONE,
+    "n": GRID_NONE,
+    "-": GRID_NONE,
+    "1": GRID_RED,
+    "red": GRID_RED,
+    "hot": GRID_RED,
+    "hotfavourite": GRID_RED,
+    "2": GRID_GREEN,
+    "green": GRID_GREEN,
+    "3": GRID_BROWN,
+    "brown": GRID_BROWN,
+    "coffee": GRID_BROWN,
+}
+
+
+def parse_hkjc_grid(value) -> str:
+    """Official HKJC board colour from getJSON's third field or GraphQL oddsDropValue.
+
+    Live `馬號=賠率=標記` codes: 0 none, 1 紅格/大熱, 2 綠格, 3 啡格.
+    Empty / unknown → "" so callers can fall back to the drop heuristic for
+    historical rows that never stored a grid.
+    """
+    if value is None or value is False:
+        return ""
+    if value is True:
+        return GRID_RED
+    text = str(value).strip().lower()
+    if text in {"", "null", "nan"}:
+        return ""
+    if text in _GRID_ALIASES:
+        return _GRID_ALIASES[text]
+    try:
+        number = int(float(text))
+    except ValueError:
+        return ""
+    return {0: GRID_NONE, 1: GRID_RED, 2: GRID_GREEN, 3: GRID_BROWN}.get(number, "")
+
+
+def official_brown(
+    grid,
+    drop_pct: float | None = None,
+    threshold: float = 50.0,
+    stored_flag=None,
+) -> bool:
+    """Brown only when HKJC painted 啡格. Legacy empty grid keeps the drop / stored flag."""
+    colour = parse_hkjc_grid(grid)
+    if colour == GRID_BROWN:
+        return True
+    if colour in {GRID_NONE, GRID_RED, GRID_GREEN}:
+        return False
+    if str(stored_flag or "").strip().lower() in {"1", "true", "yes", "y"}:
+        return True
+    return is_brown_grid(float(drop_pct or 0), threshold)
 
 
 DEFAULT_CHECKPOINTS = [15, 10, 5, 1, 0]

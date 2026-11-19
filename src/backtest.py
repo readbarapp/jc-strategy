@@ -4,14 +4,10 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from .odds_math import parse_odds
+from .odds_math import official_brown, parse_odds
 
 DEFAULT_RACE_DAYS_PER_YEAR = 88
 HKJC_TICKET_UNIT = 10.0  # official win/place dividends are per $10 ticket
-
-
-def _truthy(value) -> bool:
-    return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
 
 def _place_ok(rank: int, field_size: int) -> bool:
@@ -41,7 +37,7 @@ def trigger_rows(
             continue
         win = parse_odds(row.get("win_odds"))
         drop = float(row.get("win_drop_pct") or 0)
-        brown = _truthy(row.get("is_brown_grid")) or drop >= threshold
+        brown = official_brown(row.get("hkjc_grid"), drop, threshold, row.get("is_brown_grid"))
         if win is None or not brown:
             continue
         if not (min_odds <= win <= max_odds):

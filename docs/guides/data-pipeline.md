@@ -22,11 +22,11 @@ scraper_runner.py auto
         │     有、全部完咗 → 抄官方賽果
         │
         ├─ 第一次真實寫入 → 刪晒示範 CSV
-        ├─ 每個時間點：GraphQL 獨贏+位置（失敗改 getJSON）
+        ├─ 每個時間點：投注盤 getJSON 獨贏+位置+紅／綠／啡格（失敗改 GraphQL）
         ├─ 約每 45 秒重讀賽程：postTime 改 ≥ 2 分鐘就刪嗰場舊 checkpoint 再抄；取消／中止停抄；SCR／後備唔寫
         ├─ 延誤但未改鐘：唔當完場，延長監控最多 3 小時
         ├─ HTTP 429／403／斷線 → 退後 8–120 秒再試，之後減慢輪詢
-        ├─ 計啡格（對上一個時間點，T-1 對 T-5）
+        ├─ 啡格跟馬會投注盤官方顏色（標記 3）；舊數據先用跌幅門檻
         ├─ 符合 Telegram 規則 → Bot API 即刻 sendMessage
         ├─ 寫入 data/*.csv，大約每 120 秒 git push
         ├─ 接近 Actions 6 小時上限（約 5 小時 30 分）→ 開新 workflow 繼續
@@ -73,29 +73,9 @@ scraper_runner.py auto
 
 海外場地會被丟掉。
 
-### 2. 即時獨贏同位置賠率（主通道）
+### 2. 即時獨贏、位置同紅／綠／啡格（主通道：投注盤）
 
-| | |
-| --- | --- |
-| 網址 | 同一個 `POST https://info.cld.hkjc.com/graphql/base/` |
-| Query 名 | `racing`（`QUERY_PM_POOLS_ODDS`） |
-| 參數 | `date`、`venueCode`、`raceNo`、`oddsTypes: ["WIN", "PLA"]` |
-
-回覆 `raceMeetings[0].pmPools[]` 係 **兩個獨立彩池**，唔係一格撈埋：
-
-| 條件 | 抄邊格 | 寫入邊欄 |
-| --- | --- | --- |
-| `pmPools[].oddsType == "WIN"` | 每個 `oddsNodes[].combString`（必須係 1–2 位數字 = 馬號）同 `oddsNodes[].oddsValue` | `win_odds` |
-| `pmPools[].oddsType == "PLA"` | 同樣 `combString` + `oddsValue` | `place_odds` |
-| 其他 `oddsType`（QIN、QPL…） | **整池跳過** | 唔寫 |
-
-`combString` 對唔到馬號格式（例如連贏組合 `1-2`）會忽略，避免把複式彩當獨贏。
-
-兩個 map 都空 → 當 GraphQL 失敗，**改走後備**，唔會把空白當真實賠率。馬名用第 1 步已經備好嘅 `name_ch`。
-
-### 3. 即時賠率後備：舊 JSON
-
-官方投注頁沿用嘅接口：
+呢條就係投注 app／bet.hkjc.com 即時盤用嘅公開 JSON，賠率同格色一齊嚟，唔使自己估 50% 先當啡格。
 
 ```
 GET https://bet.hkjc.com/racing/getJSON.aspx
@@ -109,17 +89,36 @@ GET https://bet.hkjc.com/racing/getJSON.aspx
 回覆 JSON 入面 `OUT` 係一條字串，典型：
 
 ```
-WIN;1=8.4=0;2=3.5=0;3=12=1#PLA;1=2.1=0;2=1.4=0;3=3.2=0
+WIN;1=8.4=0;2=3.5=1;3=12=2;14=3.4=3#PLA;1=2.1=0;2=1.4=1
 ```
 
 點拆：
 
 1. 用 `#` 切開：前半獨贏，後半位置。
 2. 每半邊用 `;` 切開。第一段係 `WIN` 或 `PLA` 標籤，其餘每段 `馬號=賠率=標記`。
-3. **第一個數字** = 馬號；**第二個** = 賠率（寫入對應欄）；第三個官方用來標熱門，程式唔用嚟計啡格。
-4. 獨贏 map 同位置 map 分開填，最後用馬號合併成同一隻馬兩欄。
+3. **第一個數字** = 馬號；**第二個** = 賠率（寫入對應欄）。
+4. **第三個** = 官方格色：`0` 無色、`1` 紅格／大熱、`2` 綠格、`3` 啡格。獨贏寫入 `hkjc_grid`，位置寫入 `place_grid`。`is_brown_grid` 只喺標記係 `3` 先為真。
+5. 獨贏 map 同位置 map 分開填，最後用馬號合併成同一隻馬兩欄。
 
-所以「crawl 邊一格」喺呢條通道就係：**`OUT` 字串、`#` 前 WIN 段、`#` 後 PLA 段、每個 `馬號=賠率`。**
+所以「crawl 邊一格」喺呢條通道就係：**`OUT` 字串、`#` 前 WIN 段、`#` 後 PLA 段、每個 `馬號=賠率=格色`。**
+
+### 3. 即時賠率後備：GraphQL
+
+| | |
+| --- | --- |
+| 網址 | 同一個 `POST https://info.cld.hkjc.com/graphql/base/` |
+| Query 名 | `racing`（`QUERY_PM_POOLS_ODDS`） |
+| 參數 | `date`、`venueCode`、`raceNo`、`oddsTypes: ["WIN", "PLA"]` |
+
+回覆 `raceMeetings[0].pmPools[]` 係 **兩個獨立彩池**，唔係一格撈埋：
+
+| 條件 | 抄邊格 | 寫入邊欄 |
+| --- | --- | --- |
+| `pmPools[].oddsType == "WIN"` | `oddsNodes[].combString` + `oddsValue` + `oddsDropValue` / `hotFavourite` | `win_odds`、`hkjc_grid` |
+| `pmPools[].oddsType == "PLA"` | 同樣 | `place_odds`、`place_grid` |
+| 其他 `oddsType`（QIN、QPL…） | **整池跳過** | 唔寫 |
+
+`oddsDropValue` 同樣係 0／1／2／3；`hotFavourite` 為真就當紅格。兩個 map 都空 → 當 getJSON 同 GraphQL 都失敗，唔會把空白當真實賠率。馬名用第 1 步已經備好嘅 `name_ch`。
 
 ### 4. 官方賽果同派彩
 
@@ -166,24 +165,24 @@ GraphQL 後備：`resultMeetings`，`resPools` 入面 `oddsType` WIN／PLA 嘅 `
 | `monitor_lead_minutes` | `20` | 第一場前幾多分鐘開始密問 |
 | `monitor_trail_minutes` | `25` | 最後一場後再留幾耐 |
 | `commit_every_seconds` | `120` | 幾耐先 git push 一次 |
-| `brown_grid_drop_pct` | `50` | 啡格跌幅門檻 |
+| `brown_grid_drop_pct` | `50` | 舊數據（未有官方格色）先用嘅跌幅門檻 |
 
 每一場開跑時間 `postTime` 減而家香港時間 = 仲有幾多分鐘。窗口只喺**該鐘點當刻或之後**先開，唔會提早 30–45 秒定格：
 
-| 標籤 | 大約窗口 | 啡格同邊個比 |
+| 標籤 | 大約窗口 | 格色 |
 | --- | --- | --- |
-| T-15 | 15.0–13.5 分鐘 | （第一筆，無比） |
-| T-10 | 10.0–8.5 | T-15（約 5 分鐘前） |
-| T-5 | 5.0–3.5 | T-10 |
+| T-15 | 15.0–13.5 分鐘 | 嗰下投注盤官方紅／綠／啡 |
+| T-10 | 10.0–8.5 | 同上 |
+| T-5 | 5.0–3.5 | 同上 |
 | （3 分鐘） | **唔抄** | — |
-| T-1 | 1.0–0.5 | **T-5（約 4–5 分鐘前）** |
-| T-0 | 開跑當刻至開跑後約 1.5 分鐘（期間覆寫到最後一盤） | T-1 |
+| T-1 | 1.0–0.5 | 同上 |
+| T-0 | 開跑當刻至開跑後約 1.5 分鐘（期間覆寫到最後一盤） | 同上；終賠校正唔會改已經抄到嘅官方格色 |
 
 T-15…T-1 唔再「窗口一開就定格」。系統把開賽前 16 分鐘到開跑後約 1.5 分鐘嘅每 10 秒獨贏／位置寫入 `odds_ticks.csv`，到點先揀**最接近嗰一下**（T-1 用已到達 1 分鐘嘅樣本，唔好用 1 分 40 秒前嗰下）。T-0 一直覆寫到收秤，再用官方終賠校正。
 
 寫入長表 `data/odds_snapshots.csv` 一列嘅欄：
 
-`race_date, venue, race_no, scheduled_time, checkpoint, capture_timestamp, horse_no, horse_name, win_odds, place_odds, prev_win_odds, win_drop_pct, is_brown_grid`
+`race_date, venue, race_no, scheduled_time, checkpoint, capture_timestamp, horse_no, horse_name, win_odds, place_odds, prev_win_odds, win_drop_pct, is_brown_grid, hkjc_grid, place_grid`
 
 之後 pivot 成寬表 `win_board.csv` / `place_board.csv`（一馬一行，T-15…T-0 各一欄）。網站下載鈕匯出嘅就係呢種寬表。`odds_board.csv` 係獨贏寬表別名。
 
@@ -191,23 +190,24 @@ T-15…T-1 唔再「窗口一開就定格」。系統把開賽前 16 分鐘到�
 
 ## 四、點樣「分析」
 
-### 啡格（收集當下就算）
+### 啡格（跟馬會顯示，唔係自己估 50%）
+
+新數據：`hkjc_grid == brown`（getJSON 標記 `3`，或者 GraphQL `oddsDropValue == 3`）先當啡格。紅格、綠格會顯示，但策略／Telegram 唔當訊號。
+
+舊數據未有 `hkjc_grid`：先用跌幅門檻（預設 50%），方便示範同歷史列仍然睇到急跌。
 
 ```
-跌幅% = (上一時間點獨贏 − 呢個時間點獨贏) / 上一時間點獨贏 × 100
-啡格 = 跌幅 ≥ 門檻（預設 50）
+跌幅% = (上一時間點獨贏 − 呢個時間點獨贏) / 上一時間點獨贏 × 100   ← 只係參考
+啡格 = 馬會顯示啡格；冇官方格色先用 跌幅 ≥ 門檻
 ```
 
-例子：T-5 獨贏 8.4，T-1 獨贏 3.8 → (8.4−3.8)/8.4 = 54.8% → 啡格。  
-T-1 **唔會**同 T-3 比（T-3 根本冇資料）。
-
-位置表用 **位置賠率** 做同樣對比，只供你睇；策略同 Telegram 預設仍然用 **獨贏啡格** 做訊號。
+位置表用 **位置官方格色** 上色；策略同 Telegram 預設仍然用 **獨贏啡格** 做訊號。
 
 ### 策略回測（網站即時計，唔使再爬）
 
 讀已經存檔嘅 CSV：
 
-1. 只取你揀嘅 checkpoint（預設 T-1）而且 `is_brown_grid` 或跌幅 ≥ 門檻。
+1. 只取你揀嘅 checkpoint（預設 T-1）而且官方獨贏啡格（舊數據先用跌幅門檻）。
 2. 嗰刻 `win_odds` 要喺最低–最高範圍。
 3. 用 `race_date + venue + race_no + horse_no` 對賽果。
 4. 盈虧：
@@ -229,7 +229,7 @@ T-1 **唔會**同 T-3 比（T-3 根本冇資料）。
 1. `telegram.enabled` 開咗，而且有 bot token（Secret 或環境變數）同 chat id。
 2. 呢一列嘅 `checkpoint` **等於** Telegram 設定嗰個（預設 T-1）。其他時間點即使啡格都唔送。
 3. 有有效獨贏。
-4. `win_drop_pct` ≥ Telegram 啡格門檻（預設跟數據中心 50%）。
+4. 官方獨贏啡格（`hkjc_grid` = brown）。舊數據未有格色先用 `win_drop_pct` ≥ Telegram 門檻。
 5. 獨贏喺 Telegram 最低–最高範圍。
 6. 呢場呢隻馬今日未送過（每馬每場一條）。
 

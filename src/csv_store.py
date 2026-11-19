@@ -9,7 +9,7 @@ from typing import Iterable
 
 from .logger import log
 from .odds_board import WIDE_FIELDS, pivot_odds
-from .odds_math import is_brown_grid, parse_odds, win_drop_pct
+from .odds_math import official_brown, parse_odds, win_drop_pct
 from .schema import ODDS_FIELDS, RESULTS_FIELDS, TICK_FIELDS
 from .timeutil import iso_hk, now_hk
 
@@ -275,7 +275,7 @@ def apply_official_sp(results: list[dict], threshold: float = 50.0) -> int:
         new["win_odds"] = sp
         new["prev_win_odds"] = "" if prev is None else prev
         new["win_drop_pct"] = drop
-        new["is_brown_grid"] = "true" if is_brown_grid(drop, threshold) else "false"
+        new["is_brown_grid"] = "true" if official_brown(new.get("hkjc_grid"), drop, threshold) else "false"
         if parse_odds(row.get("win_odds")) != sp:
             changed += 1
         updated.append(new)

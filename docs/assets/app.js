@@ -2,14 +2,14 @@
 (function () {
   const { formatHk, weekdayZh, parseCsv, toCsv, downloadBlob, detectRepo, saveRepo,
     loadRelativeOrRaw, ghPutFile, ghDispatch, ghLatestRun, num, isTrue } = window.HKJC;
-  const { evaluate, monteCarlo, pivotOdds, yearlyBets, triggers } = window.HKJCEngine;
+  const { evaluate, monteCarlo, pivotOdds, yearlyBets, triggers, officialBrown } = window.HKJCEngine;
 
   const ODDS_BOARD_COLS = [
-    { key: "odds_t15", label: "開賽前15分鐘", brownKey: null },
-    { key: "odds_t10", label: "開賽前10分鐘", brownKey: "brown_t10" },
-    { key: "odds_t5", label: "開賽前5分鐘", brownKey: "brown_t5" },
-    { key: "odds_t1", label: "開賽前1分鐘", brownKey: "brown_t1" },
-    { key: "odds_t0", label: "開跑", brownKey: "brown_t0" },
+    { key: "odds_t15", label: "開賽前15分鐘", brownKey: null, gridKey: "grid_t15" },
+    { key: "odds_t10", label: "開賽前10分鐘", brownKey: "brown_t10", gridKey: "grid_t10" },
+    { key: "odds_t5", label: "開賽前5分鐘", brownKey: "brown_t5", gridKey: "grid_t5" },
+    { key: "odds_t1", label: "開賽前1分鐘", brownKey: "brown_t1", gridKey: "grid_t1" },
+    { key: "odds_t0", label: "開跑", brownKey: "brown_t0", gridKey: "grid_t0" },
   ];
   const WIDE_EXPORT_PAIRS = [
     ["pool", "彩池"],
@@ -33,7 +33,7 @@
   const ODDS_SNAPSHOT_FIELDS = [
     "race_date", "venue", "race_no", "scheduled_time", "checkpoint", "capture_timestamp",
     "minutes_to_post", "horse_no", "horse_name", "win_odds", "place_odds", "prev_win_odds",
-    "win_drop_pct", "is_brown_grid",
+    "win_drop_pct", "is_brown_grid", "hkjc_grid", "place_grid",
   ];
 
   const state = {
@@ -267,8 +267,7 @@
     for (const row of state.odds || []) {
       const key = horseKey(row);
       const prev = map.get(key) || { any: false, t1: false };
-      const drop = num(row.win_drop_pct, 0);
-      const brown = isTrue(row.is_brown_grid) || drop >= threshold;
+      const brown = officialBrown(row, threshold);
       if (brown) prev.any = true;
       if (brown && String(row.checkpoint || "").toUpperCase() === "T-1") prev.t1 = true;
       map.set(key, prev);
@@ -314,7 +313,7 @@
     const when =
       ($("checkpoint") && $("checkpoint").selectedOptions[0] && $("checkpoint").selectedOptions[0].text) ||
       p.checkpoint;
-    return `${when} · 獨贏 ${p.minOdds.toFixed(1)}–${p.maxOdds.toFixed(1)} · 跌幅 ≥ ${p.threshold}%`;
+    return `${when} · 獨贏 ${p.minOdds.toFixed(1)}–${p.maxOdds.toFixed(1)} · 馬會啡格`;
   }
 
   function strategyMatchKeys() {
@@ -381,6 +380,22 @@
   function fmtOdds(v) {
     if (v === "" || v == null || Number.isNaN(Number(v))) return "—";
     return Number(v).toFixed(1);
+  }
+
+  function gridLabel(value) {
+    const grid = window.HKJCEngine.parseHkjcGrid(value);
+    if (grid === "brown") return "啡";
+    if (grid === "red") return "紅";
+    if (grid === "green") return "綠";
+    return "—";
+  }
+
+  function gridCellClass(value, brownFlag) {
+    const grid = window.HKJCEngine.parseHkjcGrid(value);
+    if (grid === "brown") return "cell-brown";
+    if (grid === "red") return "cell-red";
+    if (grid === "green") return "cell-green";
+    return brownFlag ? "cell-brown" : "";
   }
 
   function horseKey(row) {
@@ -450,11 +465,11 @@
     const byCp = {};
     snaps.forEach((row) => { byCp[String(row.checkpoint).toUpperCase()] = row; });
     $("horse-audit-cps").innerHTML =
-      `<table class="grid-table text-xs"><thead><tr><th>時間點</th><th>獨贏</th><th>位置</th><th>抄低時間</th><th>距開跑(分)</th></tr></thead><tbody>` +
+      `<table class="grid-table text-xs"><thead><tr><th>時間點</th><th>獨贏</th><th>格</th><th>位置</th><th>抄低時間</th><th>距開跑(分)</th></tr></thead><tbody>` +
       order.map((cp) => {
         const row = byCp[cp];
-        if (!row) return `<tr><td>${cp}</td><td colspan="4" class="text-slate-500">未抄到</td></tr>`;
-        return `<tr><td>${cp}</td><td>${fmtOdds(row.win_odds)}</td><td>${fmtOdds(row.place_odds)}</td><td class="mono">${row.capture_timestamp || "—"}</td><td class="mono">${row.minutes_to_post || "—"}</td></tr>`;
+        if (!row) return `<tr><td>${cp}</td><td colspan="5" class="text-slate-500">未抄到</td></tr>`;
+        return `<tr><td>${cp}</td><td class="${gridCellClass(row.hkjc_grid)}">${fmtOdds(row.win_odds)}</td><td class="${gridCellClass(row.hkjc_grid)}">${gridLabel(row.hkjc_grid)}</td><td>${fmtOdds(row.place_odds)}</td><td class="mono">${row.capture_timestamp || "—"}</td><td class="mono">${row.minutes_to_post || "—"}</td></tr>`;
       }).join("") + "</tbody></table>";
     if (!ticks.length) {
       $("horse-audit-ticks").innerHTML = `<p class="text-[11px] text-slate-500">呢日未有 10 秒走勢（舊數據只得 5 個時間點）。下一個賽日起會開始存，你就唔使盯盤。</p>`;
@@ -462,8 +477,8 @@
       const last = ticks.slice(-12);
       $("horse-audit-ticks").innerHTML =
         `<p class="mb-1 text-[11px] text-slate-500">10 秒路徑（顯示最後 ${last.length} / ${ticks.length} 下）</p>` +
-        `<table class="grid-table text-xs"><thead><tr><th>時間</th><th>距開跑</th><th>獨贏</th><th>位置</th></tr></thead><tbody>` +
-        last.map((row) => `<tr><td class="mono">${row.capture_timestamp}</td><td class="mono">${row.minutes_to_post}</td><td>${fmtOdds(row.win_odds)}</td><td>${fmtOdds(row.place_odds)}</td></tr>`).join("") +
+        `<table class="grid-table text-xs"><thead><tr><th>時間</th><th>距開跑</th><th>獨贏</th><th>格</th><th>位置</th></tr></thead><tbody>` +
+        last.map((row) => `<tr><td class="mono">${row.capture_timestamp}</td><td class="mono">${row.minutes_to_post}</td><td class="${gridCellClass(row.hkjc_grid)}">${fmtOdds(row.win_odds)}</td><td class="${gridCellClass(row.hkjc_grid)}">${gridLabel(row.hkjc_grid)}</td><td>${fmtOdds(row.place_odds)}</td></tr>`).join("") +
         "</tbody></table>";
     }
   }
@@ -497,18 +512,18 @@
     const prevWin = prevRow ? Number(prevRow.win_odds) : NaN;
     const drop = Number.isFinite(prevWin) && prevWin > 0 ? Math.round((prevWin - win) / prevWin * 10000) / 100 : 0;
     const threshold = currentThreshold();
-    const brown = drop >= threshold;
     let found = false;
     state.odds = state.odds.map((row) => {
       if (horseKey(row) !== state.inspect || String(row.checkpoint).toUpperCase() !== checkpoint) return row;
       found = true;
-      return {
+      const next = {
         ...row,
         win_odds: win,
         prev_win_odds: Number.isFinite(prevWin) ? prevWin : row.prev_win_odds,
         win_drop_pct: drop,
-        is_brown_grid: brown ? "true" : "false",
       };
+      next.is_brown_grid = officialBrown(next, threshold) ? "true" : "false";
+      return next;
     });
     if (!found) {
       toast("呢個時間點未有列可改", "error");
@@ -585,13 +600,13 @@
     } else {
       const poolName = state.tableSource === "place" ? "位置賠率" : "獨贏賠率";
       $("table-meta").textContent =
-        `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 急跌格 = 較約 5 分鐘前（上一節點）跌 ≥ ${currentThreshold()}%` +
+        `顯示 ${rows.length} 匹馬 · ${poolName} · 第 ${state.page}/${pages} 頁 · 格色跟馬會紅／綠／啡格` +
         (strategyFilterOn() ? ` · 符合策略 ${strategySettingLabel()}` : "");
       if ($("board-legend")) {
         const base =
           state.tableSource === "place"
-            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。急跌格＝較上一個時間點（約 5 分鐘前）跌 ≥ 門檻，例如開賽前 1 分鐘同開賽前 5 分鐘比。冇開賽前 3 分鐘欄。揀馬仍然用獨贏啡格。"
-            : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。啡格＝較上一個時間點（約 5 分鐘前）跌 ≥ 門檻；開賽前 1 分鐘同開賽前 5 分鐘比。唔再抄開賽前 3 分鐘。";
+            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。紅／綠／啡格直接抄投注盤官方顏色，唔係我哋用 50% 自己估。揀馬仍然用獨贏啡格。"
+            : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。紅／綠／啡格直接抄投注盤官方顏色；馬會顯示為啡格先標啡格。舊數據未有官方格色先用跌幅門檻。";
         const note = strategyLegendNote();
         $("board-legend").innerHTML = note ? base + " " + note : base;
       }
@@ -609,7 +624,7 @@
           .map((row) => {
             const cells = ODDS_BOARD_COLS.map((c) => {
               const brown = c.brownKey && isTrue(row[c.brownKey]);
-              return `<td class="${brown ? "cell-brown" : ""}">${fmtOdds(row[c.key])}</td>`;
+              return `<td class="${gridCellClass(row[c.gridKey], brown)}">${fmtOdds(row[c.key])}</td>`;
             }).join("");
             const flag = row.brown_at
               ? `<td class="cell-brown">${row.brown_at}</td>`

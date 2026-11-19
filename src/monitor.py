@@ -16,7 +16,7 @@ from .capture import best_tick_for_target, due_targets, in_tick_window
 from .odds_math import (
     DEFAULT_CHECKPOINTS,
     checkpoint_label,
-    is_brown_grid,
+    official_brown,
     parse_odds,
     win_drop_pct,
 )
@@ -287,6 +287,8 @@ def snapshot_race(
             "horse_no": runner.horse_no,
             "horse_name": runner.horse_name,
             "scheduled": scheduled,
+            "win_grid": runner.win_grid or "",
+            "place_grid": runner.place_grid or "",
         }
         bank.setdefault(key, []).append(tick)
         tick_rows.append(
@@ -301,6 +303,8 @@ def snapshot_race(
                 "horse_name": runner.horse_name,
                 "win_odds": win,
                 "place_odds": "" if pla is None else pla,
+                "hkjc_grid": runner.win_grid or "",
+                "place_grid": runner.place_grid or "",
             }
         )
         for target in due:
@@ -320,7 +324,9 @@ def snapshot_race(
                 continue
             prev = checkpoint_odds.get(key)
             drop = win_drop_pct(prev, best["win"]) if prev is not None else 0.0
-            brown = is_brown_grid(drop, threshold)
+            win_grid = best.get("win_grid") or ""
+            place_grid = best.get("place_grid") or ""
+            brown = official_brown(win_grid, drop, threshold)
             if checkpoint != "T-0":
                 checkpoint_odds[key] = best["win"]
             captured.add(ck)
@@ -340,6 +346,8 @@ def snapshot_race(
                 "prev_win_odds": "" if prev is None else prev,
                 "win_drop_pct": drop,
                 "is_brown_grid": _bool_str(brown),
+                "hkjc_grid": win_grid,
+                "place_grid": place_grid,
             }
             out.append(row)
             alert_key = (race.race_no, runner.horse_no)

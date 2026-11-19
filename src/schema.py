@@ -17,6 +17,8 @@ ODDS_FIELDS = [
     "prev_win_odds",
     "win_drop_pct",
     "is_brown_grid",
+    "hkjc_grid",
+    "place_grid",
 ]
 
 TICK_FIELDS = [
@@ -30,6 +32,8 @@ TICK_FIELDS = [
     "horse_name",
     "win_odds",
     "place_odds",
+    "hkjc_grid",
+    "place_grid",
 ]
 
 RESULTS_FIELDS = [

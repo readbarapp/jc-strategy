@@ -19,7 +19,14 @@ from src.race_events import (
     should_write_runner,
 )
 from src.odds_board import pivot_odds
-from src.odds_math import is_brown_grid, match_checkpoint, parse_odds, win_drop_pct
+from src.odds_math import (
+    is_brown_grid,
+    match_checkpoint,
+    official_brown,
+    parse_hkjc_grid,
+    parse_odds,
+    win_drop_pct,
+)
 from src.telegram_notify import format_alert, should_alert
 from src.timeutil import HK_TZ, format_hk, parse_hk
 
@@ -37,6 +44,16 @@ def test_drop_and_brown_grid():
     assert is_brown_grid(49.9, 50) is False
     assert parse_odds("SCR") is None
     assert parse_odds("3.5") == 3.5
+    assert parse_hkjc_grid(0) == "none"
+    assert parse_hkjc_grid(1) == "red"
+    assert parse_hkjc_grid("2") == "green"
+    assert parse_hkjc_grid(3) == "brown"
+    assert parse_hkjc_grid(None) == ""
+    assert official_brown("brown", 10, 50) is True
+    assert official_brown("none", 80, 50) is False
+    assert official_brown("red", 80, 50) is False
+    assert official_brown("", 50, 50) is True
+    assert official_brown("", 40, 50) is False
 
 
 def test_checkpoints():
@@ -321,12 +338,62 @@ def test_place_and_win_place_use_official_dividends_not_win_odds():
 def test_winplaodds_string_keeps_pools_apart():
     win_map: dict[int, float | None] = {}
     pla_map: dict[int, float | None] = {}
-    text = "WIN;1=8.4=0;2=3.5=0#PLA;1=2.1=0;2=1.4=0"
+    win_grid: dict[int, str] = {}
+    pla_grid: dict[int, str] = {}
+    text = "133129@@@WIN;1=8.4=0;2=3.5=1;7=4.2=2;14=3.4=3#PLA;1=2.1=0;2=1.4=1"
     win_part, _, pla_part = text.partition("#")
-    HKJCClient._parse_pool_segment(win_part, win_map)
-    HKJCClient._parse_pool_segment(pla_part, pla_map)
-    assert win_map == {1: 8.4, 2: 3.5}
+    HKJCClient._parse_pool_segment(win_part, win_map, win_grid)
+    HKJCClient._parse_pool_segment(pla_part, pla_map, pla_grid)
+    assert win_map == {1: 8.4, 2: 3.5, 7: 4.2, 14: 3.4}
     assert pla_map == {1: 2.1, 2: 1.4}
+    assert win_grid == {1: "none", 2: "red", 7: "green", 14: "brown"}
+    assert pla_grid == {1: "none", 2: "red"}
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 3, "hotFavourite": True}) == "brown"
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 0, "hotFavourite": True}) == "red"
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 2}) == "green"
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 0, "hotFavourite": False}) == "none"
+
+
+def test_official_grid_beats_assumed_drop():
+    rows = [
+        {
+            "race_date": "2026-11-18",
+            "venue": "HV",
+            "race_no": "3",
+            "horse_no": "11",
+            "horse_name": "天天更好",
+            "scheduled_time": "19:40:00",
+            "checkpoint": "T-5",
+            "win_odds": 12.0,
+            "place_odds": 2.4,
+            "hkjc_grid": "none",
+        },
+        {
+            "race_date": "2026-11-18",
+            "venue": "HV",
+            "race_no": "3",
+            "horse_no": "11",
+            "horse_name": "天天更好",
+            "scheduled_time": "19:40:00",
+            "checkpoint": "T-1",
+            "win_odds": 5.9,
+            "place_odds": 1.7,
+            "hkjc_grid": "none",
+            "win_drop_pct": 50.83,
+            "is_brown_grid": "false",
+        },
+    ]
+    board = pivot_odds(rows, 50, pool="win")
+    assert board[0]["grid_t1"] == "none"
+    assert board[0]["brown_t1"] == "false"
+    rows[1]["hkjc_grid"] = "brown"
+    board = pivot_odds(rows, 50, pool="win")
+    assert board[0]["brown_t1"] == "true"
+    assert "T-1" in board[0]["brown_at"]
+    hits = trigger_rows(rows, 3.5, 9.0, 50, "T-1")
+    assert len(hits) == 1
+    rows[1]["hkjc_grid"] = "none"
+    assert trigger_rows(rows, 3.5, 9.0, 50, "T-1") == []
 
 
 def test_telegram_uses_own_checkpoint_odds_and_bet_label():
@@ -362,6 +429,8 @@ def test_telegram_uses_own_checkpoint_odds_and_bet_label():
     assert should_alert(cfg, hit) is True
     assert should_alert(cfg, miss_cp) is False
     assert should_alert(cfg, miss_odds) is False
+    assert should_alert(cfg, dict(hit, hkjc_grid="none")) is False
+    assert should_alert(cfg, dict(hit, hkjc_grid="brown", win_drop_pct=5)) is True
     text = format_alert(cfg, hit)
     assert "只買位置" in text
     assert "T-1" in text
@@ -434,7 +503,7 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
             cfg,
             meeting,
             cancelled,
-            [RunnerOdds(1, "甲", 4.0, 1.8, "Declared")],
+            [RunnerOdds(1, "甲", 4.0, 1.8, "Declared", "none", "none")],
             {},
             set(),
             set(),
@@ -452,7 +521,7 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
             meeting,
             live,
             [
-                RunnerOdds(1, "甲", 4.0, 1.8, "Declared"),
+                RunnerOdds(1, "甲", 4.0, 1.8, "Declared", "red", "none"),
                 RunnerOdds(2, "乙", None, None, "Scratched"),
                 RunnerOdds(3, "丙", None, None, "Declared"),
             ],
@@ -463,7 +532,10 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
         assert [int(r["horse_no"]) for r in rows] == [1]
         assert rows[0]["checkpoint"] == "T-1"
         assert rows[0]["win_odds"] == 4.0
+        assert rows[0]["hkjc_grid"] == "red"
+        assert rows[0]["is_brown_grid"] == "false"
         assert len(ticks) == 1
+        assert ticks[0]["hkjc_grid"] == "red"
     finally:
         monitor_mod.now_hk = original
 
@@ -837,6 +909,7 @@ if __name__ == "__main__":
     test_place_and_win_place_use_official_dividends_not_win_odds()
     test_ticket_pnl_scales_hkjc_ten_dollar_unit()
     test_winplaodds_string_keeps_pools_apart()
+    test_official_grid_beats_assumed_drop()
     test_telegram_uses_own_checkpoint_odds_and_bet_label()
     test_plan_auto_uses_actual_post_times()
     test_race_event_guards()
