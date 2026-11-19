@@ -15,6 +15,7 @@ DEFAULTS: dict[str, Any] = {
     "timezone": "Asia/Hong_Kong",
     "data": {
         "brown_grid_drop_pct": 50,
+        "brown_hold_seconds": 20,
         "scrape_interval_seconds": 10,
         "idle_poll_seconds": 60,
         "commit_every_seconds": 120,
@@ -105,3 +106,11 @@ def brown_grid_threshold(cfg: dict[str, Any]) -> float:
 
 def scrape_interval(cfg: dict[str, Any]) -> int:
     return max(5, int(cfg.get("data", {}).get("scrape_interval_seconds", 10)))
+
+
+def brown_hold_required(cfg: dict[str, Any]) -> float:
+    raw = (cfg.get("data") or {}).get("brown_hold_seconds", 20)
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        return 20.0

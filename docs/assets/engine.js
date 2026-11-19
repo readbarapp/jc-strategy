@@ -42,13 +42,21 @@
     return isTrue(row && row.is_brown_grid) || drop >= threshold;
   }
 
-  function triggers(odds, minOdds, maxOdds, threshold, checkpoint) {
+  function heldBrown(row, threshold, holdNeed) {
+    if (!officialBrown(row, threshold)) return false;
+    if (parseHkjcGrid(row && row.hkjc_grid) !== "brown") return true;
+    const raw = row && row.brown_hold_seconds;
+    if (raw === "" || raw == null) return true;
+    return num(raw, 0) >= num(holdNeed, 0);
+  }
+
+  function triggers(odds, minOdds, maxOdds, threshold, checkpoint, holdNeed) {
     const wanted = normalizeCheckpoint(checkpoint);
     const best = new Map();
     for (const row of odds) {
       if (String(row.checkpoint || "").toUpperCase() !== wanted) continue;
       const win = num(row.win_odds, NaN);
-      const brown = officialBrown(row, threshold);
+      const brown = heldBrown(row, threshold, holdNeed);
       if (!Number.isFinite(win) || !brown) continue;
       if (win < minOdds || win > maxOdds) continue;
       const key = `${row.race_date}|${row.venue}|${row.race_no}|${row.horse_no}`;
@@ -64,13 +72,14 @@
     const betType = opts.betType || "win";
     const checkpoint = opts.checkpoint || "T-1";
     const stake = num(opts.stake, 10);
+    const holdNeed = num(opts.holdNeed, 20);
     const resultMap = new Map();
     for (const r of results) {
       const key = `${r.race_date}|${r.venue}|${r.race_no}|${r.horse_no}`;
       resultMap.set(key, r);
     }
     const trades = [];
-    for (const t of triggers(odds, minOdds, maxOdds, threshold, checkpoint)) {
+    for (const t of triggers(odds, minOdds, maxOdds, threshold, checkpoint, holdNeed)) {
       const key = `${t.race_date}|${t.venue}|${t.race_no}|${t.horse_no}`;
       const res = resultMap.get(key);
       if (!res) continue;
@@ -310,6 +319,7 @@
     triggers,
     pivotOdds,
     officialBrown,
+    heldBrown,
     parseHkjcGrid,
     raceDayCount,
     yearlyBets,

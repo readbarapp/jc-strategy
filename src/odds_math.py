@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Iterable
 
 
@@ -101,6 +102,99 @@ def official_brown(
     if str(stored_flag or "").strip().lower() in {"1", "true", "yes", "y"}:
         return True
     return is_brown_grid(float(drop_pct or 0), threshold)
+
+
+def _tick_timestamp(tick: dict):
+    text = str(tick.get("ts") or tick.get("capture_timestamp") or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text[:19], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _tick_grid(tick: dict) -> str:
+    return parse_hkjc_grid(tick.get("win_grid") if tick.get("win_grid") not in (None, "") else tick.get("hkjc_grid"))
+
+
+def brown_hold_seconds(ticks: list[dict], end: dict) -> float:
+    """How long 啡格 stayed on, ending at `end`, walking backwards along the 10s path.
+
+    A single brown sample (a flash) returns 0. Two samples 10s apart return 10.
+    """
+    if not ticks or not end or _tick_grid(end) != GRID_BROWN:
+        return 0.0
+
+    def sort_key(tick: dict) -> tuple:
+        stamp = _tick_timestamp(tick)
+        minutes = tick.get("minutes")
+        if minutes in (None, ""):
+            minutes = tick.get("minutes_to_post")
+        try:
+            minute_val = -float(minutes)
+        except (TypeError, ValueError):
+            minute_val = 0.0
+        return (stamp or datetime.min, minute_val)
+
+    ordered = sorted(ticks, key=sort_key)
+    end_ts = _tick_timestamp(end)
+    end_minutes = end.get("minutes")
+    if end_minutes in (None, ""):
+        end_minutes = end.get("minutes_to_post")
+    try:
+        end_m = float(end_minutes)
+    except (TypeError, ValueError):
+        end_m = None
+    idx = None
+    for i, tick in enumerate(ordered):
+        same_ts = end_ts is not None and _tick_timestamp(tick) == end_ts
+        try:
+            tick_m = float(tick.get("minutes") if tick.get("minutes") not in (None, "") else tick.get("minutes_to_post"))
+        except (TypeError, ValueError):
+            tick_m = None
+        same_m = end_m is not None and tick_m is not None and abs(tick_m - end_m) < 1e-6
+        if same_ts or (end_ts is None and same_m) or tick is end:
+            idx = i
+            if same_ts and same_m:
+                break
+    if idx is None:
+        return 0.0
+    start = idx
+    while start > 0 and _tick_grid(ordered[start - 1]) == GRID_BROWN:
+        start -= 1
+    if start == idx:
+        return 0.0
+    first = _tick_timestamp(ordered[start])
+    last = _tick_timestamp(ordered[idx])
+    if first and last:
+        return round(max(0.0, (last - first).total_seconds()), 1)
+    return round(float(idx - start) * 10.0, 1)
+
+
+def held_brown(
+    grid,
+    drop_pct: float | None = None,
+    threshold: float = 50.0,
+    hold_seconds=None,
+    hold_need: float = 20.0,
+    stored_flag=None,
+) -> bool:
+    """Official brown at this tick, and (when known) held long enough to be a signal.
+
+    Missing hold_seconds means legacy rows with no 10s path — keep the old gate.
+    """
+    if not official_brown(grid, drop_pct, threshold, stored_flag):
+        return False
+    if parse_hkjc_grid(grid) != GRID_BROWN:
+        return True
+    if hold_seconds in (None, ""):
+        return True
+    try:
+        held = float(hold_seconds)
+    except (TypeError, ValueError):
+        return True
+    return held + 1e-9 >= float(hold_need or 0)
 
 
 DEFAULT_CHECKPOINTS = [15, 10, 5, 1, 0]

@@ -9,14 +9,15 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from . import csv_store, gitops, telegram_notify
-from .config import brown_grid_threshold, load_config, scrape_interval
+from .config import brown_grid_threshold, brown_hold_required, load_config, scrape_interval
 from .hkjc_client import HKJCClient, Meeting
 from .logger import log, log_exception
 from .capture import best_tick_for_target, due_targets, in_tick_window
 from .odds_math import (
     DEFAULT_CHECKPOINTS,
     checkpoint_label,
-    official_brown,
+    brown_hold_seconds,
+    held_brown,
     parse_odds,
     win_drop_pct,
 )
@@ -257,6 +258,7 @@ def snapshot_race(
         return [], []
     points = [int(x) for x in (cfg.get("data", {}).get("checkpoints_minutes") or DEFAULT_CHECKPOINTS)]
     threshold = brown_grid_threshold(cfg)
+    hold_need = brown_hold_required(cfg)
     scheduled = post.strftime("%H:%M:%S")
     capture_ts = format_hk(now)
     bank = tick_bank if tick_bank is not None else {}
@@ -326,7 +328,8 @@ def snapshot_race(
             drop = win_drop_pct(prev, best["win"]) if prev is not None else 0.0
             win_grid = best.get("win_grid") or ""
             place_grid = best.get("place_grid") or ""
-            brown = official_brown(win_grid, drop, threshold)
+            hold = brown_hold_seconds(bank[key], best)
+            brown = held_brown(win_grid, drop, threshold, hold, hold_need)
             if checkpoint != "T-0":
                 checkpoint_odds[key] = best["win"]
             captured.add(ck)
@@ -348,6 +351,7 @@ def snapshot_race(
                 "is_brown_grid": _bool_str(brown),
                 "hkjc_grid": win_grid,
                 "place_grid": place_grid,
+                "brown_hold_seconds": hold,
             }
             out.append(row)
             alert_key = (race.race_no, runner.horse_no)

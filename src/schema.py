@@ -19,6 +19,7 @@ ODDS_FIELDS = [
     "is_brown_grid",
     "hkjc_grid",
     "place_grid",
+    "brown_hold_seconds",
 ]
 
 TICK_FIELDS = [

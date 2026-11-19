@@ -116,6 +116,10 @@
             <p id="horse-audit-title" class="mt-1 text-xs text-slate-400"></p>
             <p id="horse-audit-sp" class="mt-2 text-sm text-slate-200"></p>
             <div id="horse-audit-cps" class="mt-3 overflow-auto"></div>
+            <p id="horse-audit-hold" class="mt-2 text-xs text-slate-400"></p>
+            <div id="horse-audit-chart-wrap" class="relative mt-3 hidden h-[240px]">
+              <canvas id="horse-audit-chart"></canvas>
+            </div>
             <div id="horse-audit-ticks" class="mt-3 overflow-auto"></div>
             <div class="mt-4 flex flex-wrap items-end gap-2">
               <label class="text-xs text-slate-400">我記得嘅時間點
@@ -132,7 +136,7 @@
               </label>
               <button id="btn-correct-odds" class="btn-gold rounded-lg px-4 py-2 text-sm">寫入更正（要 PAT）</button>
             </div>
-            <p class="mt-2 text-[11px] text-slate-500">馬會唔公開歷史走勢。下一個賽日起系統會自己存每 10 秒一條路徑（連紅／綠／啡格），到點先揀最接近嗰下。你記得邊格可以喺呢度改；開跑格亦會用官方終賠自動校正。</p>
+            <p class="mt-2 text-[11px] text-slate-500">馬會唔公開歷史走勢。下一個賽日起系統會自己存每 10 秒一條路徑（連紅／綠／啡格），圖表同表都會用晒呢啲密數據。通知唔會因為啡格閃一下就出：預設要連續 20 秒。你記得邊格可以喺呢度改；開跑格亦會用官方終賠自動校正。</p>
           </article>
           <div class="grid gap-4 lg:grid-cols-3">
             <article class="kpi-card lg:col-span-2">
@@ -142,6 +146,10 @@
                 <label class="block text-xs text-slate-400">
                   舊數據啡格跌幅門檻（新數據跟馬會啡格） <span id="brown-threshold-val" class="float-right text-gold-300">50%</span>
                   <input id="brown-threshold" type="range" min="10" max="80" step="1" value="50" class="mt-2 w-full" />
+                </label>
+                <label class="block text-xs text-slate-400">
+                  啡格要連續幾多秒先當訊號（0＝當刻有啡格就得）
+                  <input id="brown-hold" type="number" min="0" max="180" step="10" value="20" class="field mt-2" />
                 </label>
                 <label class="block text-xs text-slate-400">
                   抓取間隔（秒）
@@ -1073,8 +1081,8 @@ scraper_runner.py auto
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <script src="./assets/core.js?v=20261119b"></script>
-  <script src="./assets/engine.js?v=20261119b"></script>
-  <script src="./assets/app.js?v=20261119b"></script>
+  <script src="./assets/core.js?v=20261119c"></script>
+  <script src="./assets/engine.js?v=20261119c"></script>
+  <script src="./assets/app.js?v=20261119c"></script>
 </body>
 </html>
