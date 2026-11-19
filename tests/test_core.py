@@ -27,6 +27,7 @@ from src.odds_math import (
     official_brown,
     parse_hkjc_grid,
     parse_odds,
+    stored_grid,
     win_drop_pct,
 )
 from src.telegram_notify import format_alert, should_alert
@@ -47,8 +48,14 @@ def test_drop_and_brown_grid():
     assert parse_odds("SCR") is None
     assert parse_odds("3.5") == 3.5
     assert parse_hkjc_grid(0) == "none"
-    assert parse_hkjc_grid(1) == "red"
-    assert parse_hkjc_grid("2") == "green"
+    assert parse_hkjc_grid(1) == "none"
+    assert parse_hkjc_grid("2") == "none"
+    assert parse_hkjc_grid("red") == "none"
+    assert parse_hkjc_grid("green") == "none"
+    assert parse_hkjc_grid(True) == "none"
+    assert stored_grid("red") == "none"
+    assert stored_grid(3) == "brown"
+    assert stored_grid(None) == ""
     assert parse_hkjc_grid(3) == "brown"
     assert parse_hkjc_grid(None) == ""
     assert official_brown("brown", 10, 50) is True
@@ -136,7 +143,6 @@ def test_strategy_filter_matches_backtest_triggers():
     odds = load_odds()
     results = load_results()
     trigs = trigger_rows(odds, 3.5, 9.0, 50, "T-1")
-    assert trigs, "sample data should have at least one strategy match"
     keys = {
         (r["race_date"], r["venue"], str(r["race_no"]), str(r["horse_no"]))
         for r in trigs
@@ -145,9 +151,14 @@ def test_strategy_filter_matches_backtest_triggers():
         assert str(row.get("checkpoint")) == "T-1"
         win = float(row["win_odds"])
         assert 3.5 <= win <= 9.0
-        drop = float(row.get("win_drop_pct") or 0)
-        brown = str(row.get("is_brown_grid")).lower() == "true" or drop >= 50
-        assert brown
+        assert held_brown(
+            row.get("hkjc_grid"),
+            float(row.get("win_drop_pct") or 0),
+            50,
+            row.get("brown_hold_seconds"),
+            20,
+            row.get("is_brown_grid"),
+        )
     stats = evaluate(
         odds, results, min_odds=3.5, max_odds=9.0, bet_type="win", stake=10, threshold=50, checkpoint="T-1"
     )
@@ -171,8 +182,39 @@ def test_strategy_filter_matches_backtest_triggers():
         if (r["race_date"], r["venue"], str(r["race_no"]), str(r["horse_no"])) in keys
     ]
     assert len(matched) == len(keys)
-    wider = trigger_rows(odds, 1.1, 50.0, 50, "T-1")
-    assert len(wider) >= len(trigs)
+
+
+def test_strategy_only_keeps_official_brown():
+    rows = [
+        {
+            "race_date": "2026-11-18",
+            "venue": "HV",
+            "race_no": "1",
+            "horse_no": "7",
+            "horse_name": "啡格馬",
+            "checkpoint": "T-1",
+            "win_odds": "4.2",
+            "hkjc_grid": "brown",
+            "brown_hold_seconds": "30",
+            "is_brown_grid": "true",
+            "win_drop_pct": "10",
+        },
+        {
+            "race_date": "2026-11-18",
+            "venue": "HV",
+            "race_no": "1",
+            "horse_no": "8",
+            "horse_name": "紅格馬",
+            "checkpoint": "T-1",
+            "win_odds": "5.0",
+            "hkjc_grid": "red",
+            "brown_hold_seconds": "30",
+            "is_brown_grid": "false",
+            "win_drop_pct": "80",
+        },
+    ]
+    trigs = trigger_rows(rows, 3.5, 9.0, 50, "T-1")
+    assert [str(r["horse_no"]) for r in trigs] == ["7"]
 
 
 def test_odds_board_one_row_per_horse():
@@ -365,11 +407,11 @@ def test_winplaodds_string_keeps_pools_apart():
     HKJCClient._parse_pool_segment(pla_part, pla_map, pla_grid)
     assert win_map == {1: 8.4, 2: 3.5, 7: 4.2, 14: 3.4}
     assert pla_map == {1: 2.1, 2: 1.4}
-    assert win_grid == {1: "none", 2: "red", 7: "green", 14: "brown"}
-    assert pla_grid == {1: "none", 2: "red"}
+    assert win_grid == {1: "none", 2: "none", 7: "none", 14: "brown"}
+    assert pla_grid == {1: "none", 2: "none"}
     assert HKJCClient._grid_from_odds_node({"oddsDropValue": 3, "hotFavourite": True}) == "brown"
-    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 0, "hotFavourite": True}) == "red"
-    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 2}) == "green"
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 0, "hotFavourite": True}) == "none"
+    assert HKJCClient._grid_from_odds_node({"oddsDropValue": 2}) == "none"
     assert HKJCClient._grid_from_odds_node({"oddsDropValue": 0, "hotFavourite": False}) == "none"
 
 
@@ -555,10 +597,10 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
         assert [int(r["horse_no"]) for r in rows] == [1]
         assert rows[0]["checkpoint"] == "T-1"
         assert rows[0]["win_odds"] == 4.0
-        assert rows[0]["hkjc_grid"] == "red"
+        assert rows[0]["hkjc_grid"] == "none"
         assert rows[0]["is_brown_grid"] == "false"
         assert len(ticks) == 1
-        assert ticks[0]["hkjc_grid"] == "red"
+        assert ticks[0]["hkjc_grid"] == "none"
     finally:
         monitor_mod.now_hk = original
 

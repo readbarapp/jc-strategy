@@ -26,11 +26,13 @@
 
   function parseHkjcGrid(value) {
     const text = String(value == null ? "" : value).trim().toLowerCase();
-    if (!text) return "";
-    if (text === "0" || text === "none" || text === "n" || text === "-") return "none";
-    if (text === "1" || text === "red" || text === "hot" || text === "hotfavourite") return "red";
-    if (text === "2" || text === "green") return "green";
+    if (!text || text === "null" || text === "nan") return "";
     if (text === "3" || text === "brown" || text === "coffee") return "brown";
+    if (
+      text === "0" || text === "none" || text === "n" || text === "-" ||
+      text === "1" || text === "red" || text === "hot" || text === "hotfavourite" ||
+      text === "2" || text === "green"
+    ) return "none";
     return "";
   }
 

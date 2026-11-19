@@ -22,7 +22,7 @@ scraper_runner.py auto
         │     有、全部完咗 → 抄官方賽果
         │
         ├─ 第一次真實寫入 → 刪晒示範 CSV
-        ├─ 每個時間點：投注盤 getJSON 獨贏+位置+紅／綠／啡格（失敗改 GraphQL）
+        ├─ 每個時間點：投注盤 getJSON 獨贏+位置+啡格（失敗改 GraphQL；紅／綠丟棄）
         ├─ 約每 45 秒重讀賽程：postTime 改 ≥ 2 分鐘就刪嗰場舊 checkpoint 再抄；取消／中止停抄；SCR／後備唔寫
         ├─ 延誤但未改鐘：唔當完場，延長監控最多 3 小時
         ├─ HTTP 429／403／斷線 → 退後 8–120 秒再試，之後減慢輪詢
@@ -73,7 +73,7 @@ scraper_runner.py auto
 
 海外場地會被丟掉。
 
-### 2. 即時獨贏、位置同紅／綠／啡格（主通道：投注盤）
+### 2. 即時獨贏、位置同啡格（主通道：投注盤）
 
 呢條就係投注 app／bet.hkjc.com 即時盤用嘅公開 JSON，賠率同格色一齊嚟，唔使自己估 50% 先當啡格。
 
@@ -97,7 +97,7 @@ WIN;1=8.4=0;2=3.5=1;3=12=2;14=3.4=3#PLA;1=2.1=0;2=1.4=1
 1. 用 `#` 切開：前半獨贏，後半位置。
 2. 每半邊用 `;` 切開。第一段係 `WIN` 或 `PLA` 標籤，其餘每段 `馬號=賠率=標記`。
 3. **第一個數字** = 馬號；**第二個** = 賠率（寫入對應欄）。
-4. **第三個** = 官方格色：`0` 無色、`1` 紅格／大熱、`2` 綠格、`3` 啡格。獨贏寫入 `hkjc_grid`，位置寫入 `place_grid`。`is_brown_grid` 只喺標記係 `3` 先為真。
+4. **第三個** = 官方格色。只把 `3` 當啡格寫入 `hkjc_grid`／`place_grid`；`0`／`1` 紅／`2` 綠一律當 `none`。
 5. 獨贏 map 同位置 map 分開填，最後用馬號合併成同一隻馬兩欄。
 
 所以「crawl 邊一格」喺呢條通道就係：**`OUT` 字串、`#` 前 WIN 段、`#` 後 PLA 段、每個 `馬號=賠率=格色`。**
@@ -118,7 +118,7 @@ WIN;1=8.4=0;2=3.5=1;3=12=2;14=3.4=3#PLA;1=2.1=0;2=1.4=1
 | `pmPools[].oddsType == "PLA"` | 同樣 | `place_odds`、`place_grid` |
 | 其他 `oddsType`（QIN、QPL…） | **整池跳過** | 唔寫 |
 
-`oddsDropValue` 同樣係 0／1／2／3；`hotFavourite` 為真就當紅格。兩個 map 都空 → 當 getJSON 同 GraphQL 都失敗，唔會把空白當真實賠率。馬名用第 1 步已經備好嘅 `name_ch`。
+`oddsDropValue == 3` 先當啡格；`hotFavourite`／紅／綠唔存。兩個 map 都空 → 當 getJSON 同 GraphQL 都失敗，唔會把空白當真實賠率。馬名用第 1 步已經備好嘅 `name_ch`。
 
 ### 4. 官方賽果同派彩
 
@@ -164,14 +164,26 @@ GraphQL 後備：`resultMeetings`，`resPools` 入面 `oddsType` WIN／PLA 嘅 `
 | `idle_poll_seconds` | `60` | 20 分鐘內都冇場要開，就問得慢啲 |
 | `monitor_lead_minutes` | `20` | 第一場前幾多分鐘開始密問 |
 | `monitor_trail_minutes` | `25` | 最後一場後再留幾耐 |
-| `commit_every_seconds` | `120` | 幾耐先 git push 一次 |
+| `commit_every_seconds` | `120` | 幾耐先 git push 一次（存檔用；網站即時欄唔經呢條） |
 | `brown_grid_drop_pct` | `50` | 舊數據（未有官方格色）先用嘅跌幅門檻 |
+
+免費 GitHub Pages **唔係** live server。每次改 CSV 都要 git commit + Pages 重建／CDN，所以 120 秒係存檔節奏，唔係畫面節奏。以前 iPhone monitor 之所以密，幾乎肯定係部機自己問馬會。
+
+免費情況下最密嘅做法：
+
+| 通道 | 由邊度打 | 密到幾密 | 限制 |
+| --- | --- | --- | --- |
+| GraphQL `info.cld.hkjc.com/graphql/base/` | 你部瀏覽器（github.io） | 約 4 秒 | CORS `Access-Control-Allow-Origin: *`；要用官方 whitelist query |
+| getJSON `bet.hkjc.com/racing/getJSON.aspx` | GitHub Actions | 10 秒存檔 | 由 github.io Origin 開會被擋／回 SPA HTML，唔能當網站 live |
+| git push CSV | Actions → Pages | 約 120 秒 | 歷史時間點、走勢圖、回測 |
+
+網站「即時」欄走 GraphQL（現在場 + 下一場）。Telegram 仍然係 Actions 抄到嗰下即刻送。
 
 每一場開跑時間 `postTime` 減而家香港時間 = 仲有幾多分鐘。窗口只喺**該鐘點當刻或之後**先開，唔會提早 30–45 秒定格：
 
 | 標籤 | 大約窗口 | 格色 |
 | --- | --- | --- |
-| T-15 | 15.0–13.5 分鐘 | 嗰下投注盤官方紅／綠／啡 |
+| T-15 | 15.0–13.5 分鐘 | 嗰下投注盤官方啡格（紅／綠丟棄） |
 | T-10 | 10.0–8.5 | 同上 |
 | T-5 | 5.0–3.5 | 同上 |
 | （3 分鐘） | **唔抄** | — |
@@ -192,7 +204,7 @@ T-15…T-1 唔再「窗口一開就定格」。系統把開賽前 16 分鐘到�
 
 ### 啡格（跟馬會顯示，唔係自己估 50%）
 
-新數據：`hkjc_grid == brown`（getJSON 標記 `3`，或者 GraphQL `oddsDropValue == 3`）先當啡格。紅格、綠格會顯示，但策略／Telegram 唔當訊號。
+新數據：`hkjc_grid == brown`（getJSON 標記 `3`，或者 GraphQL `oddsDropValue == 3`）先當啡格。紅格、綠格唔會寫入。
 
 舊數據未有 `hkjc_grid`：先用跌幅門檻（預設 50%），方便示範同歷史列仍然睇到急跌。
 

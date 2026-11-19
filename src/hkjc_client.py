@@ -672,14 +672,7 @@ class HKJCClient:
     @staticmethod
     def _grid_from_odds_node(node: dict) -> str:
         grid = parse_hkjc_grid(node.get("oddsDropValue"))
-        hot = node.get("hotFavourite") in (True, "true", "True", 1, "1")
-        if grid == "brown":
-            return "brown"
-        if grid == "green":
-            return "green"
-        if grid == "red" or hot:
-            return "red"
-        return grid
+        return "brown" if grid == "brown" else "none"
 
     def _odds_graphql(self, meeting: Meeting, race_no: int) -> list[RunnerOdds]:
         data = self._graphql(
@@ -752,7 +745,7 @@ class HKJCClient:
         target: dict[int, float | None],
         grids: dict[int, str] | None = None,
     ) -> None:
-        # WIN;1=3.5=0;2=12=1;14=3.4=3  — third field is official 0/1紅/2綠/3啡
+        # WIN;1=3.5=0;2=12=1;14=3.4=3  — third field 0 none / 1紅 / 2綠 / 3啡; we keep 3 only
         body = segment.split(";", 1)[-1] if ";" in segment else segment
         for token in body.split(";"):
             parts = token.split("=")

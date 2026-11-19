@@ -18,6 +18,7 @@ from .odds_math import (
     checkpoint_label,
     brown_hold_seconds,
     held_brown,
+    stored_grid,
     parse_odds,
     win_drop_pct,
 )
@@ -289,8 +290,8 @@ def snapshot_race(
             "horse_no": runner.horse_no,
             "horse_name": runner.horse_name,
             "scheduled": scheduled,
-            "win_grid": runner.win_grid or "",
-            "place_grid": runner.place_grid or "",
+            "win_grid": stored_grid(runner.win_grid),
+            "place_grid": stored_grid(runner.place_grid),
         }
         bank.setdefault(key, []).append(tick)
         tick_rows.append(
@@ -305,8 +306,8 @@ def snapshot_race(
                 "horse_name": runner.horse_name,
                 "win_odds": win,
                 "place_odds": "" if pla is None else pla,
-                "hkjc_grid": runner.win_grid or "",
-                "place_grid": runner.place_grid or "",
+                "hkjc_grid": stored_grid(runner.win_grid),
+                "place_grid": stored_grid(runner.place_grid),
             }
         )
         for target in due:
@@ -326,8 +327,8 @@ def snapshot_race(
                 continue
             prev = checkpoint_odds.get(key)
             drop = win_drop_pct(prev, best["win"]) if prev is not None else 0.0
-            win_grid = best.get("win_grid") or ""
-            place_grid = best.get("place_grid") or ""
+            win_grid = stored_grid(best.get("win_grid"))
+            place_grid = stored_grid(best.get("place_grid"))
             hold = brown_hold_seconds(bank[key], best)
             brown = held_brown(win_grid, drop, threshold, hold, hold_need)
             if checkpoint != "T-0":
