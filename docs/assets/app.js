@@ -32,7 +32,8 @@
   ];
   const ODDS_SNAPSHOT_FIELDS = [
     "race_date", "venue", "race_no", "scheduled_time", "checkpoint", "capture_timestamp",
-    "horse_no", "horse_name", "win_odds", "place_odds", "prev_win_odds", "win_drop_pct", "is_brown_grid",
+    "minutes_to_post", "horse_no", "horse_name", "win_odds", "place_odds", "prev_win_odds",
+    "win_drop_pct", "is_brown_grid",
   ];
 
   const state = {
@@ -52,6 +53,8 @@
     backtest: null,
     mc: null,
     dataOrigin: "demo",
+    ticks: [],
+    inspect: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -130,17 +133,19 @@
   async function loadAll() {
     const g = state.github;
     try {
-      const [cfgText, oddsText, resText, statusText, logText, originText] = await Promise.all([
+      const [cfgText, oddsText, resText, statusText, logText, originText, tickText] = await Promise.all([
         loadRelativeOrRaw(g, "./config.json", "config.json").catch(() => "{}"),
         loadRelativeOrRaw(g, "./data/odds_snapshots.csv", "data/odds_snapshots.csv"),
         loadRelativeOrRaw(g, "./data/race_results.csv", "data/race_results.csv"),
         loadRelativeOrRaw(g, "./status.json", "status.json").catch(() => "{}"),
         loadRelativeOrRaw(g, "./logs/latest.log", "logs/latest.log").catch(() => ""),
         loadRelativeOrRaw(g, "./data/dataset_origin.json", "data/dataset_origin.json").catch(() => '{"origin":"demo"}'),
+        loadRelativeOrRaw(g, "./data/odds_ticks.csv", "data/odds_ticks.csv").catch(() => ""),
       ]);
       state.config = JSON.parse(cfgText || "{}");
       state.odds = parseCsv(oddsText);
       state.results = parseCsv(resText);
+      state.ticks = tickText ? parseCsv(tickText) : [];
       state.status = JSON.parse(statusText || "{}");
       state.logText = logText;
       try {
@@ -151,6 +156,8 @@
       hydrateForms();
       fillFilterOptions();
       renderDataTable();
+      renderSpAudit();
+      renderHorseAudit();
       renderStatus();
       runStrategy();
       renderDataOrigin();
@@ -376,6 +383,151 @@
     return Number(v).toFixed(1);
   }
 
+  function horseKey(row) {
+    return [row.race_date, row.venue, String(row.race_no), String(row.horse_no)].join("|");
+  }
+
+  function renderSpAudit() {
+    const el = $("sp-audit-banner");
+    if (!el) return;
+    const date = $("filter-date") ? $("filter-date").value : "";
+    const t0 = {};
+    state.odds.forEach((row) => {
+      if (String(row.checkpoint || "").toUpperCase() !== "T-0") return;
+      if (date && row.race_date !== date) return;
+      t0[horseKey(row)] = Number(row.win_odds);
+    });
+    const gaps = [];
+    state.results.forEach((row) => {
+      if (date && row.race_date !== date) return;
+      const sp = Number(row.final_sp);
+      const live = t0[horseKey(row)];
+      if (!Number.isFinite(sp) || sp <= 0 || !Number.isFinite(live) || live <= 0) return;
+      const pct = Math.abs(live - sp) / sp * 100;
+      if (pct >= 10) {
+        gaps.push(`${row.horse_name || row.horse_no} 第${row.race_no}場 T-0 ${live} vs 終賠 ${sp}`);
+      }
+    });
+    if (!Object.keys(t0).length) {
+      el.textContent = "撳表入面一隻馬可以核對時間點。馬會冇公開走勢，系統會自己存 10 秒路徑；終賠用來教開跑格。";
+      return;
+    }
+    if (!gaps.length) {
+      el.textContent = (date ? date + "：" : "") + "開跑格同官方終賠相差都 < 10%。撳一隻馬睇時間點同 10 秒走勢。";
+      return;
+    }
+    el.textContent = `開跑格同官方終賠差 ≥ 10%（${gaps.length} 隻）：` + gaps.slice(0, 6).join("；") +
+      (gaps.length > 6 ? "…" : "") + "。撳馬可以人手更正。";
+  }
+
+  function renderHorseAudit() {
+    const box = $("horse-audit");
+    if (!box) return;
+    const key = state.inspect;
+    if (!key) {
+      box.classList.add("hidden");
+      return;
+    }
+    box.classList.remove("hidden");
+    const snaps = state.odds.filter((row) => horseKey(row) === key);
+    const result = state.results.find((row) => horseKey(row) === key) || {};
+    const ticks = (state.ticks || []).filter((row) => horseKey(row) === key)
+      .sort((a, b) => String(a.capture_timestamp).localeCompare(String(b.capture_timestamp)));
+    const sample = snaps[0] || result;
+    $("horse-audit-title").textContent = sample
+      ? `${sample.race_date || ""} ${venueName(sample.venue)} 第 ${sample.race_no} 場  ${sample.horse_no}. ${sample.horse_name || ""}`
+      : key;
+    const t0 = snaps.find((row) => String(row.checkpoint).toUpperCase() === "T-0");
+    const sp = Number(result.final_sp);
+    const live = t0 ? Number(t0.win_odds) : NaN;
+    let spLine = result.final_sp ? `官方終賠 ${fmtOdds(result.final_sp)} · 獨贏派彩 ${result.win_dividend || "—"} · 位置 ${result.placedividend || "—"}` : "未有官方賽果／終賠";
+    if (Number.isFinite(sp) && Number.isFinite(live) && sp > 0) {
+      const pct = ((live - sp) / sp * 100);
+      spLine += ` · T-0 ${fmtOdds(live)}（${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%）`;
+    }
+    $("horse-audit-sp").textContent = spLine;
+    const order = ["T-15", "T-10", "T-5", "T-1", "T-0"];
+    const byCp = {};
+    snaps.forEach((row) => { byCp[String(row.checkpoint).toUpperCase()] = row; });
+    $("horse-audit-cps").innerHTML =
+      `<table class="grid-table text-xs"><thead><tr><th>時間點</th><th>獨贏</th><th>位置</th><th>抄低時間</th><th>距開跑(分)</th></tr></thead><tbody>` +
+      order.map((cp) => {
+        const row = byCp[cp];
+        if (!row) return `<tr><td>${cp}</td><td colspan="4" class="text-slate-500">未抄到</td></tr>`;
+        return `<tr><td>${cp}</td><td>${fmtOdds(row.win_odds)}</td><td>${fmtOdds(row.place_odds)}</td><td class="mono">${row.capture_timestamp || "—"}</td><td class="mono">${row.minutes_to_post || "—"}</td></tr>`;
+      }).join("") + "</tbody></table>";
+    if (!ticks.length) {
+      $("horse-audit-ticks").innerHTML = `<p class="text-[11px] text-slate-500">呢日未有 10 秒走勢（舊數據只得 5 個時間點）。下一個賽日起會開始存，你就唔使盯盤。</p>`;
+    } else {
+      const last = ticks.slice(-12);
+      $("horse-audit-ticks").innerHTML =
+        `<p class="mb-1 text-[11px] text-slate-500">10 秒路徑（顯示最後 ${last.length} / ${ticks.length} 下）</p>` +
+        `<table class="grid-table text-xs"><thead><tr><th>時間</th><th>距開跑</th><th>獨贏</th><th>位置</th></tr></thead><tbody>` +
+        last.map((row) => `<tr><td class="mono">${row.capture_timestamp}</td><td class="mono">${row.minutes_to_post}</td><td>${fmtOdds(row.win_odds)}</td><td>${fmtOdds(row.place_odds)}</td></tr>`).join("") +
+        "</tbody></table>";
+    }
+  }
+
+  function inspectHorse(row) {
+    state.inspect = horseKey(row);
+    renderHorseAudit();
+    const box = $("horse-audit");
+    if (box) box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  async function correctInspectedOdds() {
+    if (!state.inspect) {
+      toast("先撳表入面一隻馬", "error");
+      return;
+    }
+    const checkpoint = ($("correct-checkpoint") && $("correct-checkpoint").value) || "T-1";
+    const win = Number($("correct-win") && $("correct-win").value);
+    if (!Number.isFinite(win) || win <= 0) {
+      toast("請填正確獨贏賠率", "error");
+      return;
+    }
+    persistGithubForm();
+    if (!state.github.token) {
+      toast("更正要喺狀態頁貼 PAT", "error");
+      return;
+    }
+    const parts = state.inspect.split("|");
+    const prevCp = { "T-10": "T-15", "T-5": "T-10", "T-1": "T-5", "T-0": "T-1" }[checkpoint];
+    const prevRow = state.odds.find((row) => horseKey(row) === state.inspect && String(row.checkpoint).toUpperCase() === prevCp);
+    const prevWin = prevRow ? Number(prevRow.win_odds) : NaN;
+    const drop = Number.isFinite(prevWin) && prevWin > 0 ? Math.round((prevWin - win) / prevWin * 10000) / 100 : 0;
+    const threshold = currentThreshold();
+    const brown = drop >= threshold;
+    let found = false;
+    state.odds = state.odds.map((row) => {
+      if (horseKey(row) !== state.inspect || String(row.checkpoint).toUpperCase() !== checkpoint) return row;
+      found = true;
+      return {
+        ...row,
+        win_odds: win,
+        prev_win_odds: Number.isFinite(prevWin) ? prevWin : row.prev_win_odds,
+        win_drop_pct: drop,
+        is_brown_grid: brown ? "true" : "false",
+      };
+    });
+    if (!found) {
+      toast("呢個時間點未有列可改", "error");
+      return;
+    }
+    try {
+      const csv = toCsv(state.odds, ODDS_SNAPSHOT_FIELDS);
+      const message = `data: correct ${state.inspect} ${checkpoint} to ${win}`;
+      await ghPutFile(state.github, "data/odds_snapshots.csv", csv, message);
+      await ghPutFile(state.github, "docs/data/odds_snapshots.csv", csv, message);
+      renderDataTable();
+      renderHorseAudit();
+      runStrategy();
+      toast(`已把 ${checkpoint} 獨贏改成 ${win}`, "ok");
+    } catch (err) {
+      toast(err.message || String(err), "error");
+    }
+  }
+
   function renderDataTable() {
     let rows;
     try {
@@ -426,7 +578,7 @@
                 return `<td>${v == null || v === "" ? "—" : v}</td>`;
               })
               .join("");
-            return `<tr>${tds}</tr>`;
+            return `<tr class="cursor-pointer" data-horse-key="${horseKey(row)}">${tds}</tr>`;
           })
           .join("");
       }
@@ -462,7 +614,7 @@
             const flag = row.brown_at
               ? `<td class="cell-brown">${row.brown_at}</td>`
               : `<td>—</td>`;
-            return `<tr>
+            return `<tr class="cursor-pointer" data-horse-key="${horseKey(row)}">
               <td>${row.race_date}</td>
               <td>${venueName(row.venue)}</td>
               <td>${row.race_no}</td>
@@ -476,6 +628,8 @@
       }
     }
     $("page-indicator").textContent = `${state.page} / ${pages}`;
+    renderSpAudit();
+    if (state.inspect) renderHorseAudit();
   }
 
   function fmtSignedMoney(n) {
@@ -937,6 +1091,16 @@
     $("btn-once").addEventListener("click", () => trigger("once"));
     $("btn-results").addEventListener("click", () => trigger("results"));
     if ($("btn-purge-date")) $("btn-purge-date").addEventListener("click", purgeSelectedDate);
+    if ($("btn-correct-odds")) $("btn-correct-odds").addEventListener("click", correctInspectedOdds);
+    if ($("data-body")) {
+      $("data-body").addEventListener("click", (ev) => {
+        const tr = ev.target && ev.target.closest ? ev.target.closest("tr[data-horse-key]") : null;
+        if (!tr) return;
+        const key = tr.getAttribute("data-horse-key");
+        const [race_date, venue, race_no, horse_no] = (key || "").split("|");
+        inspectHorse({ race_date, venue, race_no, horse_no });
+      });
+    }
     $("btn-tg-test").addEventListener("click", testTelegram);
   }
 

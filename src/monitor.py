@@ -12,11 +12,11 @@ from . import csv_store, gitops, telegram_notify
 from .config import brown_grid_threshold, load_config, scrape_interval
 from .hkjc_client import HKJCClient, Meeting
 from .logger import log, log_exception
+from .capture import best_tick_for_target, due_targets, in_tick_window
 from .odds_math import (
     DEFAULT_CHECKPOINTS,
-    checkpoint_allows_refresh,
+    checkpoint_label,
     is_brown_grid,
-    match_checkpoint,
     parse_odds,
     win_drop_pct,
 )
@@ -57,11 +57,19 @@ def should_handoff(elapsed_seconds: float | None = None, budget_seconds: float |
     return elapsed >= float(budget_seconds)
 
 
-def restore_monitor_state(meeting: Meeting) -> tuple[dict[tuple[int, int], float], set[tuple[int, int, str]], set[tuple[int, int]]]:
+def restore_monitor_state(
+    meeting: Meeting,
+) -> tuple[
+    dict[tuple[int, int], float],
+    set[tuple[int, int, str]],
+    set[tuple[int, int]],
+    dict[tuple[int, int, str], float],
+]:
     """Reload today's snapshots so a continuation job does not recapture or re-alert."""
     checkpoint_odds: dict[tuple[int, int], float] = {}
     captured: set[tuple[int, int, str]] = set()
     alerted: set[tuple[int, int]] = set()
+    written_minutes: dict[tuple[int, int, str], float] = {}
     rows = [
         row
         for row in csv_store.load_odds()
@@ -85,6 +93,10 @@ def restore_monitor_state(meeting: Meeting) -> tuple[dict[tuple[int, int], float
         if not race_no or not horse_no or not checkpoint:
             continue
         captured.add((race_no, horse_no, checkpoint))
+        try:
+            written_minutes[(race_no, horse_no, checkpoint)] = float(row.get("minutes_to_post"))
+        except (TypeError, ValueError):
+            pass
         win = parse_odds(row.get("win_odds"))
         if win is not None:
             by_horse.setdefault((race_no, horse_no), {})[checkpoint] = win
@@ -99,7 +111,7 @@ def restore_monitor_state(meeting: Meeting) -> tuple[dict[tuple[int, int], float
             checkpoint_odds[key] = sequence[-1]
     if captured:
         log(f"Restored {len(captured)} captured checkpoints from CSV for continuation")
-    return checkpoint_odds, captured, alerted
+    return checkpoint_odds, captured, alerted, written_minutes
 
 
 def _handoff(meeting: Meeting) -> str:
@@ -194,6 +206,34 @@ def collect_results(client: HKJCClient, meeting: Meeting, threshold: float = 50.
     return added
 
 
+def restore_tick_bank(meeting: Meeting) -> dict[tuple[int, int], list[dict]]:
+    bank: dict[tuple[int, int], list[dict]] = {}
+    for row in csv_store.load_ticks():
+        if str(row.get("race_date")) != meeting.race_date or str(row.get("venue")) != meeting.venue:
+            continue
+        try:
+            race_no = int(float(row.get("race_no") or 0))
+            horse_no = int(float(row.get("horse_no") or 0))
+            minutes = float(row.get("minutes_to_post"))
+        except (TypeError, ValueError):
+            continue
+        win = parse_odds(row.get("win_odds"))
+        if not race_no or not horse_no or win is None:
+            continue
+        bank.setdefault((race_no, horse_no), []).append(
+            {
+                "minutes": minutes,
+                "win": win,
+                "pla": parse_odds(row.get("place_odds")),
+                "ts": row.get("capture_timestamp") or "",
+                "horse_no": horse_no,
+                "horse_name": row.get("horse_name") or "",
+                "scheduled": row.get("scheduled_time") or "",
+            }
+        )
+    return bank
+
+
 def snapshot_race(
     cfg: dict[str, Any],
     meeting: Meeting,
@@ -202,29 +242,29 @@ def snapshot_race(
     checkpoint_odds: dict[tuple[int, int], float],
     captured: set[tuple[int, int, str]],
     alerted: set[tuple[int, int]],
-) -> list[dict]:
-    """Write one snapshot per official checkpoint.
-
-    啡格 is vs the previous checkpoint (e.g. T-1 vs T-5), not vs the last 10s tick.
-    """
+    tick_bank: dict[tuple[int, int], list[dict]] | None = None,
+    written_minutes: dict[tuple[int, int, str], float] | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Record a 10s tick and emit checkpoints from the closest sample to each mark."""
     if is_race_off(getattr(race, "status", "")) or is_meeting_off(getattr(meeting, "status", "")):
-        return []
+        return [], []
     now = now_hk()
     post = HKJCClient.scheduled_datetime(meeting, race)
-    if post:
-        minutes = minutes_until(post, now)
-        checkpoint = match_checkpoint(
-            minutes, cfg.get("data", {}).get("checkpoints_minutes") or DEFAULT_CHECKPOINTS
-        )
-    else:
-        checkpoint = None
-    if not checkpoint:
-        return []
+    if not post:
+        return [], []
+    minutes = minutes_until(post, now)
+    if not in_tick_window(minutes):
+        return [], []
+    points = [int(x) for x in (cfg.get("data", {}).get("checkpoints_minutes") or DEFAULT_CHECKPOINTS)]
     threshold = brown_grid_threshold(cfg)
-    scheduled = post.strftime("%H:%M:%S") if post else (race.post_time or "")
+    scheduled = post.strftime("%H:%M:%S")
     capture_ts = format_hk(now)
+    bank = tick_bank if tick_bank is not None else {}
+    written = written_minutes if written_minutes is not None else {}
     out: list[dict] = []
+    tick_rows: list[dict] = []
     runner_status = getattr(race, "runner_status", {}) or {}
+    due = due_targets(minutes, points)
     for runner in runners:
         status = getattr(runner, "status", "") or runner_status.get(runner.horse_no, "")
         win = parse_odds(runner.win_odds)
@@ -239,38 +279,74 @@ def snapshot_race(
             continue
         if not should_write_runner(status, win):
             continue
-        ck = (race.race_no, runner.horse_no, checkpoint)
-        minutes_now = minutes if post else 0.0
-        refreshing = ck in captured and checkpoint_allows_refresh(checkpoint, minutes_now)
-        if ck in captured and not refreshing:
-            continue
-        prev = checkpoint_odds.get(key)
-        drop = win_drop_pct(prev, win) if prev is not None else 0.0
-        brown = is_brown_grid(drop, threshold)
-        if checkpoint != "T-0":
-            checkpoint_odds[key] = win
-        captured.add(ck)
-        row = {
-            "race_date": meeting.race_date,
-            "venue": meeting.venue,
-            "race_no": race.race_no,
-            "scheduled_time": scheduled,
-            "checkpoint": checkpoint,
-            "capture_timestamp": capture_ts,
+        tick = {
+            "minutes": minutes,
+            "win": win,
+            "pla": pla,
+            "ts": capture_ts,
             "horse_no": runner.horse_no,
             "horse_name": runner.horse_name,
-            "win_odds": "" if win is None else win,
-            "place_odds": "" if pla is None else pla,
-            "prev_win_odds": "" if prev is None else prev,
-            "win_drop_pct": drop,
-            "is_brown_grid": _bool_str(brown),
+            "scheduled": scheduled,
         }
-        out.append(row)
-        alert_key = (race.race_no, runner.horse_no)
-        if alert_key not in alerted and telegram_notify.should_alert(cfg, row):
-            telegram_notify.send_message(cfg, telegram_notify.format_alert(cfg, row))
-            alerted.add(alert_key)
-    return out
+        bank.setdefault(key, []).append(tick)
+        tick_rows.append(
+            {
+                "race_date": meeting.race_date,
+                "venue": meeting.venue,
+                "race_no": race.race_no,
+                "scheduled_time": scheduled,
+                "capture_timestamp": capture_ts,
+                "minutes_to_post": round(minutes, 3),
+                "horse_no": runner.horse_no,
+                "horse_name": runner.horse_name,
+                "win_odds": win,
+                "place_odds": "" if pla is None else pla,
+            }
+        )
+        for target in due:
+            checkpoint = checkpoint_label(target)
+            best = best_tick_for_target(bank[key], target)
+            if not best:
+                continue
+            ck = (race.race_no, runner.horse_no, checkpoint)
+            prev_m = written.get(ck)
+            if ck in captured and prev_m is not None:
+                if target == 0:
+                    if float(best["minutes"]) >= prev_m:
+                        continue
+                elif abs(float(best["minutes"]) - target) >= abs(prev_m - target) - 1e-9:
+                    continue
+            elif ck in captured and prev_m is None and target != 0:
+                continue
+            prev = checkpoint_odds.get(key)
+            drop = win_drop_pct(prev, best["win"]) if prev is not None else 0.0
+            brown = is_brown_grid(drop, threshold)
+            if checkpoint != "T-0":
+                checkpoint_odds[key] = best["win"]
+            captured.add(ck)
+            written[ck] = float(best["minutes"])
+            row = {
+                "race_date": meeting.race_date,
+                "venue": meeting.venue,
+                "race_no": race.race_no,
+                "scheduled_time": scheduled,
+                "checkpoint": checkpoint,
+                "capture_timestamp": best["ts"],
+                "minutes_to_post": round(float(best["minutes"]), 3),
+                "horse_no": runner.horse_no,
+                "horse_name": best.get("horse_name") or runner.horse_name,
+                "win_odds": best["win"],
+                "place_odds": "" if best.get("pla") is None else best["pla"],
+                "prev_win_odds": "" if prev is None else prev,
+                "win_drop_pct": drop,
+                "is_brown_grid": _bool_str(brown),
+            }
+            out.append(row)
+            alert_key = (race.race_no, runner.horse_no)
+            if alert_key not in alerted and telegram_notify.should_alert(cfg, row):
+                telegram_notify.send_message(cfg, telegram_notify.format_alert(cfg, row))
+                alerted.add(alert_key)
+    return out, tick_rows
 
 
 def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None) -> str:
@@ -321,7 +397,8 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
                 return _handoff(meeting)
             time.sleep(min(60, max(5, (first_watch - now_hk()).total_seconds())))
 
-    checkpoint_odds, captured, alerted = restore_monitor_state(meeting)
+    checkpoint_odds, captured, alerted, written_minutes = restore_monitor_state(meeting)
+    tick_bank = restore_tick_bank(meeting)
     monitored: list[int] = []
     last_commit = time.time()
     last_refresh = 0.0
@@ -359,7 +436,8 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
         if not live_races:
             log("All remaining races cancelled or resulted — stop odds loop")
             break
-        tick_rows: list[dict] = []
+        checkpoint_rows: list[dict] = []
+        raw_ticks: list[dict] = []
         nearest = None
         for race in live_races:
             post = client.scheduled_datetime(meeting, race)
@@ -367,6 +445,8 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
             if delta is not None and (nearest is None or abs(delta) < abs(nearest)):
                 nearest = delta
             if race_is_over(race.status, delta):
+                continue
+            if not in_tick_window(delta):
                 continue
             try:
                 runners = client.fetch_win_place_odds(meeting, race.race_no)
@@ -377,14 +457,26 @@ def run_monitor(cfg: dict[str, Any] | None = None, race_date: str | None = None)
                 continue
             if race.race_no not in monitored:
                 monitored.append(race.race_no)
-            tick_rows.extend(
-                snapshot_race(cfg, meeting, race, runners, checkpoint_odds, captured, alerted)
+            snaps, ticks = snapshot_race(
+                cfg,
+                meeting,
+                race,
+                runners,
+                checkpoint_odds,
+                captured,
+                alerted,
+                tick_bank,
+                written_minutes,
             )
+            checkpoint_rows.extend(snaps)
+            raw_ticks.extend(ticks)
             time.sleep(0.15)
 
-        if tick_rows:
-            csv_store.upsert_odds(tick_rows)
-            log(f"Wrote {len(tick_rows)} odds rows (races={monitored})")
+        if raw_ticks:
+            csv_store.upsert_ticks(raw_ticks)
+        if checkpoint_rows:
+            csv_store.upsert_odds(checkpoint_rows)
+            log(f"Wrote {len(checkpoint_rows)} checkpoint rows from {len(raw_ticks)} ticks (races={monitored})")
 
         active_posts = [
             dt
@@ -448,13 +540,30 @@ def run_once(cfg: dict[str, Any] | None = None, race_date: str | None = None) ->
     checkpoint_odds: dict[tuple[int, int], float] = {}
     captured: set[tuple[int, int, str]] = set()
     alerted: set[tuple[int, int]] = set()
+    written_minutes: dict[tuple[int, int, str], float] = {}
+    tick_bank: dict[tuple[int, int], list[dict]] = {}
     rows: list[dict] = []
+    ticks: list[dict] = []
     for race in meeting.races:
         if is_race_off(race.status):
             continue
         runners = client.fetch_win_place_odds(meeting, race.race_no)
-        rows.extend(snapshot_race(cfg, meeting, race, runners, checkpoint_odds, captured, alerted))
+        snaps, raw = snapshot_race(
+            cfg,
+            meeting,
+            race,
+            runners,
+            checkpoint_odds,
+            captured,
+            alerted,
+            tick_bank,
+            written_minutes,
+        )
+        rows.extend(snaps)
+        ticks.extend(raw)
         time.sleep(0.2)
+    if ticks:
+        csv_store.upsert_ticks(ticks)
     if rows:
         csv_store.upsert_odds(rows)
     write_status(

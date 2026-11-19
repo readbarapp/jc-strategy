@@ -10,7 +10,7 @@ from typing import Iterable
 from .logger import log
 from .odds_board import WIDE_FIELDS, pivot_odds
 from .odds_math import is_brown_grid, parse_odds, win_drop_pct
-from .schema import ODDS_FIELDS, RESULTS_FIELDS
+from .schema import ODDS_FIELDS, RESULTS_FIELDS, TICK_FIELDS
 from .timeutil import iso_hk, now_hk
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,6 +18,7 @@ DATA_DIR = ROOT / "data"
 DOCS_DATA = ROOT / "docs" / "data"
 ODDS_PATH = DATA_DIR / "odds_snapshots.csv"
 RESULTS_PATH = DATA_DIR / "race_results.csv"
+TICK_PATH = DATA_DIR / "odds_ticks.csv"
 BOARD_PATH = DATA_DIR / "odds_board.csv"
 WIN_BOARD_PATH = DATA_DIR / "win_board.csv"
 PLACE_BOARD_PATH = DATA_DIR / "place_board.csv"
@@ -63,6 +64,16 @@ def _key_result(row: dict) -> tuple:
         str(row.get("venue", "")),
         str(row.get("race_no", "")),
         str(row.get("horse_no", "")),
+    )
+
+
+def _key_tick(row: dict) -> tuple:
+    return (
+        str(row.get("race_date", "")),
+        str(row.get("venue", "")),
+        str(row.get("race_no", "")),
+        str(row.get("horse_no", "")),
+        str(row.get("capture_timestamp", "")),
     )
 
 
@@ -123,6 +134,7 @@ def purge_demo_tables() -> None:
     """Drop generated sample rows so backtests only see live HKJC captures."""
     write_rows(ODDS_PATH, ODDS_FIELDS, [])
     write_rows(RESULTS_PATH, RESULTS_FIELDS, [])
+    write_rows(TICK_PATH, TICK_FIELDS, [])
     rebuild_odds_board()
     log("Purged demo sample CSVs — dashboard will only show live HKJC rows")
 
@@ -161,6 +173,17 @@ def load_results() -> list[dict]:
     return read_rows(RESULTS_PATH, RESULTS_FIELDS)
 
 
+def upsert_ticks(rows: list[dict]) -> int:
+    if not rows:
+        return 0
+    prepare_for_live_rows(rows)
+    return upsert(TICK_PATH, TICK_FIELDS, rows, _key_tick)
+
+
+def load_ticks() -> list[dict]:
+    return read_rows(TICK_PATH, TICK_FIELDS)
+
+
 def _same_id(value, expected) -> bool:
     return str(value or "").strip() == str(expected or "").strip()
 
@@ -177,11 +200,23 @@ def drop_odds_for_race(race_date: str, venue: str, race_no) -> int:
             and _same_id(row.get("race_no"), race_no)
         )
     ]
+    ticks = load_ticks()
+    keep_ticks = [
+        row
+        for row in ticks
+        if not (
+            _same_id(row.get("race_date"), race_date)
+            and _same_id(row.get("venue"), venue)
+            and _same_id(row.get("race_no"), race_no)
+        )
+    ]
     removed = len(rows) - len(keep)
     if removed:
         write_rows(ODDS_PATH, ODDS_FIELDS, keep)
         rebuild_odds_board()
         log(f"Dropped {removed} odds rows for {race_date} {venue} R{race_no} after schedule change")
+    if len(ticks) != len(keep_ticks):
+        write_rows(TICK_PATH, TICK_FIELDS, keep_ticks)
     return removed
 
 
@@ -257,15 +292,20 @@ def drop_date(race_date: str) -> tuple[int, int]:
     results = load_results()
     keep_odds = [row for row in odds if not _same_id(row.get("race_date"), race_date)]
     keep_results = [row for row in results if not _same_id(row.get("race_date"), race_date)]
+    ticks = load_ticks()
+    keep_ticks = [row for row in ticks if not _same_id(row.get("race_date"), race_date)]
     n_odds = len(odds) - len(keep_odds)
     n_results = len(results) - len(keep_results)
+    n_ticks = len(ticks) - len(keep_ticks)
     if n_odds:
         write_rows(ODDS_PATH, ODDS_FIELDS, keep_odds)
         rebuild_odds_board()
     if n_results:
         write_rows(RESULTS_PATH, RESULTS_FIELDS, keep_results)
-    if n_odds or n_results:
-        log(f"Dropped {n_odds} odds + {n_results} result rows for {race_date}")
+    if n_ticks:
+        write_rows(TICK_PATH, TICK_FIELDS, keep_ticks)
+    if n_odds or n_results or n_ticks:
+        log(f"Dropped {n_odds} odds + {n_results} result + {n_ticks} tick rows for {race_date}")
     return n_odds, n_results
 
 
@@ -277,6 +317,7 @@ def copy_to_docs() -> None:
         (WIN_BOARD_PATH, DOCS_DATA / "win_board.csv"),
         (PLACE_BOARD_PATH, DOCS_DATA / "place_board.csv"),
         (RESULTS_PATH, DOCS_DATA / "race_results.csv"),
+        (TICK_PATH, DOCS_DATA / "odds_ticks.csv"),
         (ORIGIN_PATH, DOCS_ORIGIN_PATH),
         (ROOT / "config.json", ROOT / "docs" / "config.json"),
         (ROOT / "status.json", ROOT / "docs" / "status.json"),

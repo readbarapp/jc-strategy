@@ -127,7 +127,7 @@ scraper_runner.py auto
 <tr><td>T-1</td><td>1.0–0.5</td><td><strong>T-5（約 4–5 分鐘前）</strong></td></tr>
 <tr><td>T-0</td><td>開跑當刻至開跑後約 1.5 分鐘（期間覆寫到最後一盤）</td><td>T-1</td></tr>
 </tbody></table>
-<p>T-15…T-1 每隻馬每個標籤寫 <strong>一次</strong>（剛到達該鐘點嗰下）。T-0 會一直覆寫到收秤；官方賽果入嚟之後再用賽果表「獨贏賠率」（SP）校正，避免最後幾十秒大熱被提早定格。</p>
+<p>T-15…T-1 唔再「窗口一開就定格」。系統把開賽前 16 分鐘到開跑後約 1.5 分鐘嘅每 10 秒獨贏／位置寫入 <code>odds_ticks.csv</code>，到點先揀<strong>最接近嗰一下</strong>。T-0 一直覆寫到收秤，再用官方終賠校正。</p>
 <p>寫入長表 <code>data/odds_snapshots.csv</code> 一列嘅欄：</p>
 <p><code>race_date, venue, race_no, scheduled_time, checkpoint, capture_timestamp, horse_no, horse_name, win_odds, place_odds, prev_win_odds, win_drop_pct, is_brown_grid</code></p>
 <p>之後 pivot 成寬表 <code>win_board.csv</code> / <code>place_board.csv</code>（一馬一行，T-15…T-0 各一欄）。網站下載鈕匯出嘅就係呢種寬表。<code>odds_board.csv</code> 係獨贏寬表別名。</p>

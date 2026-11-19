@@ -54,6 +54,28 @@ def test_checkpoints():
     assert match_checkpoint(-0.2) == "T-0"
 
 
+def test_closest_tick_picks_exact_minute_not_early_window():
+    from src.capture import best_tick_for_target, due_targets
+
+    ticks = [
+        {"minutes": 1.68, "win": 12.0},
+        {"minutes": 1.05, "win": 11.0},
+        {"minutes": 0.92, "win": 9.4},
+        {"minutes": 0.45, "win": 8.0},
+    ]
+    best = best_tick_for_target(ticks, 1)
+    assert best is not None and best["win"] == 9.4
+    t0 = best_tick_for_target(
+        [{"minutes": 0.45, "win": 11.0}, {"minutes": -0.05, "win": 8.5}, {"minutes": -0.4, "win": 5.9}],
+        0,
+    )
+    assert t0 is not None and t0["win"] == 5.9
+    assert 1 not in due_targets(1.68)
+    assert 1 in due_targets(1.0)
+    assert 0 not in due_targets(0.45)
+    assert 0 in due_targets(0.0)
+
+
 def test_backtest_on_sample():
     odds = load_odds()
     results = load_results()
@@ -408,18 +430,16 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
         cfg = {"data": {"brown_grid_drop_pct": 50, "checkpoints_minutes": [15, 10, 5, 1, 0]}}
         cancelled = RaceInfo(race_no=1, post_time="15:00:00", status="Abandoned")
         meeting = Meeting(race_date="2026-11-18", venue="ST", races=[cancelled])
-        assert (
-            snapshot_race(
-                cfg,
-                meeting,
-                cancelled,
-                [RunnerOdds(1, "甲", 4.0, 1.8, "Declared")],
-                {},
-                set(),
-                set(),
-            )
-            == []
+        snaps, ticks = snapshot_race(
+            cfg,
+            meeting,
+            cancelled,
+            [RunnerOdds(1, "甲", 4.0, 1.8, "Declared")],
+            {},
+            set(),
+            set(),
         )
+        assert snaps == [] and ticks == []
         live = RaceInfo(
             race_no=2,
             post_time="15:00:00",
@@ -427,7 +447,7 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
             runner_status={2: "Scratched"},
         )
         meeting = Meeting(race_date="2026-11-18", venue="ST", races=[live])
-        rows = snapshot_race(
+        rows, ticks = snapshot_race(
             cfg,
             meeting,
             live,
@@ -443,6 +463,7 @@ def test_snapshot_skips_cancelled_scratch_and_blank_odds():
         assert [int(r["horse_no"]) for r in rows] == [1]
         assert rows[0]["checkpoint"] == "T-1"
         assert rows[0]["win_odds"] == 4.0
+        assert len(ticks) == 1
     finally:
         monitor_mod.now_hk = original
 
@@ -454,28 +475,34 @@ def test_t0_waits_for_post_then_refreshes_closing_odds():
     cfg = {"data": {"brown_grid_drop_pct": 50, "checkpoints_minutes": [15, 10, 5, 1, 0]}}
     race = RaceInfo(race_no=3, post_time="19:40:00", status="Declared")
     meeting = Meeting(race_date="2026-11-18", venue="HV", races=[race])
-    captured: set = set()
+    captured: set = {(3, 11, "T-1")}
     odds = {(3, 11): 12.0}
+    written = {(3, 11, "T-1"): 1.0}
     try:
         monitor_mod.now_hk = lambda: parse_hk("2026-11-18 19:39:33")
-        early = snapshot_race(
-            cfg, meeting, race, [RunnerOdds(11, "天天更好", 11.0, 2.2, "Declared")], odds, captured, set()
+        early, early_ticks = snapshot_race(
+            cfg, meeting, race, [RunnerOdds(11, "天天更好", 11.0, 2.2, "Declared")],
+            odds, captured, set(), None, written,
         )
-        assert early == []
+        assert all(row["checkpoint"] != "T-0" for row in early)
+        assert early_ticks
         monitor_mod.now_hk = lambda: parse_hk("2026-11-18 19:40:00")
-        first = snapshot_race(
-            cfg, meeting, race, [RunnerOdds(11, "天天更好", 8.5, 2.0, "Declared")], odds, captured, set()
+        first, _ = snapshot_race(
+            cfg, meeting, race, [RunnerOdds(11, "天天更好", 8.5, 2.0, "Declared")],
+            odds, captured, set(), None, written,
         )
-        assert first[0]["checkpoint"] == "T-0"
-        assert first[0]["win_odds"] == 8.5
-        assert first[0]["prev_win_odds"] == 12.0
+        t0 = [row for row in first if row["checkpoint"] == "T-0"]
+        assert t0 and t0[0]["win_odds"] == 8.5
+        assert t0[0]["prev_win_odds"] == 12.0
         monitor_mod.now_hk = lambda: parse_hk("2026-11-18 19:40:20")
-        late = snapshot_race(
-            cfg, meeting, race, [RunnerOdds(11, "天天更好", 5.9, 1.7, "Declared")], odds, captured, set()
+        late, _ = snapshot_race(
+            cfg, meeting, race, [RunnerOdds(11, "天天更好", 5.9, 1.7, "Declared")],
+            odds, captured, set(), None, written,
         )
-        assert late[0]["win_odds"] == 5.9
-        assert late[0]["prev_win_odds"] == 12.0
-        assert late[0]["is_brown_grid"] == "true"
+        t0_late = [row for row in late if row["checkpoint"] == "T-0"]
+        assert t0_late[0]["win_odds"] == 5.9
+        assert t0_late[0]["prev_win_odds"] == 12.0
+        assert t0_late[0]["is_brown_grid"] == "true"
     finally:
         monitor_mod.now_hk = original
 
@@ -784,7 +811,7 @@ def test_first_live_upsert_drops_demo_rows():
 
 def test_restore_monitor_state_and_handoff_budget():
     meeting = Meeting(race_date="2026-11-18", venue="HV")
-    odds_map, captured, alerted = restore_monitor_state(meeting)
+    odds_map, captured, alerted, _written = restore_monitor_state(meeting)
     assert captured
     assert any(ck == "T-1" for _, _, ck in captured)
     assert odds_map
@@ -801,6 +828,7 @@ if __name__ == "__main__":
     test_timezone_is_hong_kong()
     test_drop_and_brown_grid()
     test_checkpoints()
+    test_closest_tick_picks_exact_minute_not_early_window()
     test_backtest_on_sample()
     test_odds_board_one_row_per_horse()
     test_t1_brown_compares_to_t5_not_t3()
