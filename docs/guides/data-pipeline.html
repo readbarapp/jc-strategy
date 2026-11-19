@@ -1,6 +1,6 @@
 <h1>資料收集、分析同警報：技術說明</h1>
 <p>呢份講程式 <strong>實際去邊、抄邊格、點計、點推播</strong>。對應程式：<code>src/hkjc_client.py</code>（拎數）、<code>src/monitor.py</code>（時間同寫入）、<code>src/odds_math.py</code>（啡格）、<code>src/backtest.py</code> 同 <code>docs/assets/engine.js</code>（分析）、<code>src/telegram_notify.py</code>（警報）。</p>
-<p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。第一次真實 crawl 會刪晒示範列（<code>data/dataset_origin.json</code> 由 <code>demo</code> 轉 <code>live</code>）。</p>
+<p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。未抄到官方啡格之前示範會留住；真實場次先寫入 <code>data/live_inbox/</code>。有 <code>hkjc_grid=brown</code> 先刪示範，<code>dataset_origin.json</code> 先由 <code>demo</code> 轉 <code>live</code>。</p>
 <hr />
 <h2>一、整體流程</h2>
 <pre><code>GitHub Actions（香港時間 09:00–00:30 每隔約 30 分鐘偵測，或你人手觸發）
@@ -15,7 +15,8 @@ scraper_runner.py auto
         │     有、賽日進行中 → 高頻抄賠率
         │     有、全部完咗 → 抄官方賽果
         │
-        ├─ 第一次真實寫入 → 刪晒示範 CSV
+        ├─ 未有官方啡格 → 真實列寫入 live_inbox，示範表唔郁
+        ├─ 抄到官方啡格 → 刪示範，inbox 升上 dashboard
         ├─ 每個時間點：投注盤 getJSON 獨贏+位置+啡格（失敗改 GraphQL；紅／綠丟棄）
         ├─ 約每 45 秒重讀賽程：postTime 改 ≥ 2 分鐘就刪嗰場舊 checkpoint 再抄；取消／中止停抄；SCR／後備唔寫
         ├─ 延誤但未改鐘：唔當完場，延長監控最多 3 小時
@@ -466,7 +467,7 @@ scraper_runner.py auto
 <tr>
 <td>會唔會互相覆蓋</td>
 <td>只喺你故意跑 <code>demo-data</code></td>
-<td>upsert：同一場同一時間點會更新，唔同時間點就追加</td>
+<td>未有官方啡格時寫入 <code>live_inbox</code>，唔覆蓋示範；有啡格先升上 dashboard</td>
 </tr>
 </tbody>
 </table>

@@ -183,7 +183,7 @@
               <li>開跑前 15、10、5、1 分鐘同開跑嗰下，分別向馬會問<strong class="text-gold-300">兩個獨立彩池</strong>：獨贏（WIN）同位置（PLA）。兩個數字分開寫入兩欄，唔會撈亂。唔再抄開賽前 3 分鐘。</li>
               <li>啡格：只抄投注盤官方標記 <strong class="text-gold-300">3</strong>。紅格／綠格／大熱唔存、唔顯示、唔當訊號。舊數據未有官方格色先用跌幅門檻。</li>
               <li>賽事完咗再抄官方名次、獨贏派彩、位置派彩（每 $10）。回測「只買位置」用嘅係呢個官方位置派彩，唔係開賽前位置賠率去估。</li>
-              <li>而家表入面舊日子係<strong class="text-amber-200">示範假數據</strong>。第一次抄到真實馬會賠率／賽果嗰下，程式會<strong class="text-gold-300">刪晒全部示範列</strong>，之後回測只睇真實紀錄。</li>
+              <li>而家表入面舊日子係<strong class="text-amber-200">示範假數據</strong>。未抄到官方啡格之前會一直留住示範。真實場次會先放入 <span class="mono">data/live_inbox</span>，有啡格先刪示範、改顯示真實紀錄。</li>
             </ol>
             <details class="mt-4 text-xs leading-relaxed text-slate-400">
               <summary class="cursor-pointer text-gold-300">技術細節：點樣向馬會拎賠率（唔係亂填）</summary>
@@ -494,7 +494,7 @@
 <h3>賽事進行中</h3>
 <p>網站唔會替你落飛。警報只係話「呢隻馬喺你定嘅規則下出現啡格」。你自己決定買獨贏、位置定兩者。</p>
 <p>時間點／走勢 CSV 大約每 <strong>120 秒</strong> 先 commit 上 GitHub 一次（git + Pages CDN 做唔到 10 秒 live）。網站<strong>即時欄</strong>唔經 git：瀏覽器每約 4 秒直接問馬會 GraphQL。Telegram 仍然係 Actions 抄到嗰下即刻送。</p>
-<p>接近開跑先 10 秒問一次馬會；隔開場次會慢到 60 秒。若被擋（429／403）會自動停一停再試。單一 Actions job 最長 6 小時，到大約 5 小時 30 分會自己再開下一段繼續抄。第一次抄到真實數據會刪晒示範假數據，之後回測只用真實場次。</p>
+<p>接近開跑先 10 秒問一次馬會；隔開場次會慢到 60 秒。若被擋（429／403）會自動停一停再試。單一 Actions job 最長 6 小時，到大約 5 小時 30 分會自己再開下一段繼續抄。示範會留住，直到有場次抄到官方啡格先換走。</p>
 <h3>最後一場完咗</h3>
 <p>監控會再等大約 <strong>25 分鐘</strong>，然後抄官方賽果（名次、獨贏派彩、位置派彩）。零晨 00:20 再補一次。</p>
 <p>第二朝你可以：</p>
@@ -588,7 +588,7 @@
 <hr />
 <h2>常見問題</h2>
 <p><strong>點解表入面有舊日子但寫住示範數據？</strong><br />
-歷史示範係假數據，欄位同真 crawl 一樣。真賽日 Actions 會把真實賠率 <strong>追加</strong> 入同一個 CSV，唔會用產生器覆蓋真數。</p>
+歷史示範係假數據，欄位同真 crawl 一樣。未抄到官方啡格之前會一直顯示示範；真實場次先暫存 <code>live_inbox</code>，有啡格先換走示範。</p>
 <p><strong>點解開賽前 1 分鐘未見啡格？</strong><br />
 要嗰下投注盤真係顯示啡格（紅格／綠格唔存、唔算）。舊數據未有官方格色先睇 T-5 同 T-1 跌幅 ≥ 門檻。3 分鐘位唔會有資料。</p>
 <p><strong>收到 Telegram 但網站未更新？</strong><br />
@@ -607,7 +607,7 @@
             <div class="guide-prose">
 <h1>資料收集、分析同警報：技術說明</h1>
 <p>呢份講程式 <strong>實際去邊、抄邊格、點計、點推播</strong>。對應程式：<code>src/hkjc_client.py</code>（拎數）、<code>src/monitor.py</code>（時間同寫入）、<code>src/odds_math.py</code>（啡格）、<code>src/backtest.py</code> 同 <code>docs/assets/engine.js</code>（分析）、<code>src/telegram_notify.py</code>（警報）。</p>
-<p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。第一次真實 crawl 會刪晒示範列（<code>data/dataset_origin.json</code> 由 <code>demo</code> 轉 <code>live</code>）。</p>
+<p>示範 CSV 由 <code>scripts/generate_sample_data.py</code> 產生，<strong>真賽日唔會跑呢個產生器</strong>。未抄到官方啡格之前示範會留住；真實場次先寫入 <code>data/live_inbox/</code>。有 <code>hkjc_grid=brown</code> 先刪示範，<code>dataset_origin.json</code> 先由 <code>demo</code> 轉 <code>live</code>。</p>
 <hr />
 <h2>一、整體流程</h2>
 <pre><code>GitHub Actions（香港時間 09:00–00:30 每隔約 30 分鐘偵測，或你人手觸發）
@@ -622,7 +622,8 @@ scraper_runner.py auto
         │     有、賽日進行中 → 高頻抄賠率
         │     有、全部完咗 → 抄官方賽果
         │
-        ├─ 第一次真實寫入 → 刪晒示範 CSV
+        ├─ 未有官方啡格 → 真實列寫入 live_inbox，示範表唔郁
+        ├─ 抄到官方啡格 → 刪示範，inbox 升上 dashboard
         ├─ 每個時間點：投注盤 getJSON 獨贏+位置+啡格（失敗改 GraphQL；紅／綠丟棄）
         ├─ 約每 45 秒重讀賽程：postTime 改 ≥ 2 分鐘就刪嗰場舊 checkpoint 再抄；取消／中止停抄；SCR／後備唔寫
         ├─ 延誤但未改鐘：唔當完場，延長監控最多 3 小時
@@ -1073,7 +1074,7 @@ scraper_runner.py auto
 <tr>
 <td>會唔會互相覆蓋</td>
 <td>只喺你故意跑 <code>demo-data</code></td>
-<td>upsert：同一場同一時間點會更新，唔同時間點就追加</td>
+<td>未有官方啡格時寫入 <code>live_inbox</code>，唔覆蓋示範；有啡格先升上 dashboard</td>
 </tr>
 </tbody>
 </table>
@@ -1088,6 +1089,6 @@ scraper_runner.py auto
   <script src="./assets/core.js?v=20261119d"></script>
   <script src="./assets/engine.js?v=20261119d"></script>
   <script src="./assets/hkjc-live.js?v=20261119d"></script>
-  <script src="./assets/app.js?v=20261119d"></script>
+  <script src="./assets/app.js?v=20261119e"></script>
 </body>
 </html>

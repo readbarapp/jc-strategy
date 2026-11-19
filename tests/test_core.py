@@ -879,6 +879,7 @@ def test_first_live_upsert_drops_demo_rows():
         "BOARD_PATH": cs.BOARD_PATH,
         "WIN_BOARD_PATH": cs.WIN_BOARD_PATH,
         "PLACE_BOARD_PATH": cs.PLACE_BOARD_PATH,
+        "TICK_PATH": cs.TICK_PATH,
         "ORIGIN_PATH": cs.ORIGIN_PATH,
         "DOCS_ORIGIN_PATH": cs.DOCS_ORIGIN_PATH,
     }
@@ -891,6 +892,7 @@ def test_first_live_upsert_drops_demo_rows():
         cs.BOARD_PATH = root / "odds_board.csv"
         cs.WIN_BOARD_PATH = root / "win_board.csv"
         cs.PLACE_BOARD_PATH = root / "place_board.csv"
+        cs.TICK_PATH = root / "odds_ticks.csv"
         cs.ORIGIN_PATH = root / "dataset_origin.json"
         cs.DOCS_ORIGIN_PATH = root / "docs" / "dataset_origin.json"
         cs.write_rows(
@@ -911,6 +913,7 @@ def test_first_live_upsert_drops_demo_rows():
                     "prev_win_odds": "8.0",
                     "win_drop_pct": "50.0",
                     "is_brown_grid": "true",
+                    "hkjc_grid": "brown",
                 }
             ],
         )
@@ -932,6 +935,7 @@ def test_first_live_upsert_drops_demo_rows():
                     "prev_win_odds": "11.0",
                     "win_drop_pct": "52.7",
                     "is_brown_grid": "true",
+                    "hkjc_grid": "brown",
                 }
             ]
         )
@@ -946,8 +950,81 @@ def test_first_live_upsert_drops_demo_rows():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_live_without_brown_keeps_demo_rows():
+    import shutil
+    import tempfile
+
+    import src.csv_store as cs
+    from src.schema import ODDS_FIELDS
+
+    original = {key: getattr(cs, key) for key in (
+        "DATA_DIR", "DOCS_DATA", "ODDS_PATH", "RESULTS_PATH", "BOARD_PATH",
+        "WIN_BOARD_PATH", "PLACE_BOARD_PATH", "TICK_PATH", "ORIGIN_PATH", "DOCS_ORIGIN_PATH",
+    )}
+    root = Path(tempfile.mkdtemp())
+    try:
+        cs.DATA_DIR = root
+        cs.DOCS_DATA = root / "docs"
+        cs.ODDS_PATH = root / "odds_snapshots.csv"
+        cs.RESULTS_PATH = root / "race_results.csv"
+        cs.BOARD_PATH = root / "odds_board.csv"
+        cs.WIN_BOARD_PATH = root / "win_board.csv"
+        cs.PLACE_BOARD_PATH = root / "place_board.csv"
+        cs.TICK_PATH = root / "odds_ticks.csv"
+        cs.ORIGIN_PATH = root / "dataset_origin.json"
+        cs.DOCS_ORIGIN_PATH = root / "docs" / "dataset_origin.json"
+        cs.write_rows(
+            cs.ODDS_PATH,
+            ODDS_FIELDS,
+            [
+                {
+                    "race_date": "2026-10-15",
+                    "venue": "HV",
+                    "race_no": "1",
+                    "checkpoint": "T-1",
+                    "horse_no": "1",
+                    "horse_name": "示範馬",
+                    "win_odds": "4.0",
+                    "hkjc_grid": "brown",
+                    "is_brown_grid": "true",
+                }
+            ],
+        )
+        cs.set_dataset_origin("demo", "test")
+        cs.upsert_odds(
+            [
+                {
+                    "race_date": "2026-11-18",
+                    "venue": "HV",
+                    "race_no": "3",
+                    "checkpoint": "T-1",
+                    "horse_no": "11",
+                    "horse_name": "天天更好",
+                    "win_odds": "5.9",
+                    "hkjc_grid": "",
+                    "is_brown_grid": "true",
+                    "win_drop_pct": "50.83",
+                }
+            ]
+        )
+        dash = cs.load_odds()
+        assert [r["horse_name"] for r in dash] == ["示範馬"]
+        assert cs.dataset_origin() == "demo"
+        inbox = cs.load_inbox_odds()
+        assert len(inbox) == 1
+        assert inbox[0]["horse_name"] == "天天更好"
+        monitor_rows = cs.load_monitor_odds()
+        assert {r["horse_name"] for r in monitor_rows} == {"示範馬", "天天更好"}
+    finally:
+        for key, value in original.items():
+            setattr(cs, key, value)
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_restore_monitor_state_and_handoff_budget():
-    meeting = Meeting(race_date="2026-11-18", venue="HV")
+    odds = load_odds()
+    assert odds
+    meeting = Meeting(race_date=odds[0]["race_date"], venue=odds[0]["venue"])
     odds_map, captured, alerted, _written = restore_monitor_state(meeting)
     assert captured
     assert any(ck == "T-1" for _, _, ck in captured)
@@ -985,5 +1062,6 @@ if __name__ == "__main__":
     test_drop_date_removes_only_that_day()
     test_yearly_bets_is_frequency_times_race_days()
     test_first_live_upsert_drops_demo_rows()
+    test_live_without_brown_keeps_demo_rows()
     test_restore_monitor_state_and_handoff_budget()
     print("all tests ok")

@@ -74,7 +74,7 @@ def restore_monitor_state(
     written_minutes: dict[tuple[int, int, str], float] = {}
     rows = [
         row
-        for row in csv_store.load_odds()
+        for row in csv_store.load_monitor_odds()
         if str(row.get("race_date")) == meeting.race_date and str(row.get("venue")) == meeting.venue
     ]
     rows.sort(
@@ -112,7 +112,8 @@ def restore_monitor_state(
         elif sequence:
             checkpoint_odds[key] = sequence[-1]
     if captured:
-        log(f"Restored {len(captured)} captured checkpoints from CSV for continuation")
+        source = "CSV + live_inbox" if csv_store.dataset_origin() != "live" else "CSV"
+        log(f"Restored {len(captured)} captured checkpoints from {source} for continuation")
     return checkpoint_odds, captured, alerted, written_minutes
 
 

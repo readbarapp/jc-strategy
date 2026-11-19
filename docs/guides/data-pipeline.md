@@ -2,7 +2,7 @@
 
 呢份講程式 **實際去邊、抄邊格、點計、點推播**。對應程式：`src/hkjc_client.py`（拎數）、`src/monitor.py`（時間同寫入）、`src/odds_math.py`（啡格）、`src/backtest.py` 同 `docs/assets/engine.js`（分析）、`src/telegram_notify.py`（警報）。
 
-示範 CSV 由 `scripts/generate_sample_data.py` 產生，**真賽日唔會跑呢個產生器**。第一次真實 crawl 會刪晒示範列（`data/dataset_origin.json` 由 `demo` 轉 `live`）。
+示範 CSV 由 `scripts/generate_sample_data.py` 產生，**真賽日唔會跑呢個產生器**。未抄到官方啡格之前示範會留住；真實場次先寫入 `data/live_inbox/`。有 `hkjc_grid=brown` 先刪示範，`dataset_origin.json` 先由 `demo` 轉 `live`。
 
 ---
 
@@ -21,7 +21,8 @@ scraper_runner.py auto
         │     有、賽日進行中 → 高頻抄賠率
         │     有、全部完咗 → 抄官方賽果
         │
-        ├─ 第一次真實寫入 → 刪晒示範 CSV
+        ├─ 未有官方啡格 → 真實列寫入 live_inbox，示範表唔郁
+        ├─ 抄到官方啡格 → 刪示範，inbox 升上 dashboard
         ├─ 每個時間點：投注盤 getJSON 獨贏+位置+啡格（失敗改 GraphQL；紅／綠丟棄）
         ├─ 約每 45 秒重讀賽程：postTime 改 ≥ 2 分鐘就刪嗰場舊 checkpoint 再抄；取消／中止停抄；SCR／後備唔寫
         ├─ 延誤但未改鐘：唔當完場，延長監控最多 3 小時
@@ -282,6 +283,6 @@ Pages 只係靜態檔。你撳「重新載入數據」= 再 fetch 呢啲 CSV，�
 | 馬名 | 程式內建中文名單 | GraphQL `name_ch` |
 | 獨贏／位置 | 隨機模擬，兩欄分開 | 馬會 WIN／PLA 兩池 |
 | 派彩 | 用終賠估算 | 賽果頁派彩表 |
-| 會唔會互相覆蓋 | 只喺你故意跑 `demo-data` | upsert：同一場同一時間點會更新，唔同時間點就追加 |
+| 會唔會互相覆蓋 | 只喺你故意跑 `demo-data` | 未有官方啡格時寫入 `live_inbox`，唔覆蓋示範；有啡格先升上 dashboard |
 
 想核對「而家係咪真係抄緊馬會」：賽日開住 Actions log，應該見到 GraphQL 或 `getJSON winplaodds`，同埋 `Wrote N odds rows`。網站馬名應係中文，獨贏同位置數字唔應該成表相同。

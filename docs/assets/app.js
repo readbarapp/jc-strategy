@@ -175,7 +175,7 @@
       toast(
         live
           ? `已載入真實馬會數據：${oddsBoard().length} 匹馬賠率走勢、賽果 ${state.results.length} 列（示範已刪）`
-          : `已載入 ${oddsBoard().length} 匹馬賠率走勢、賽果 ${state.results.length} 列（而家仲係示範假數據；第一次真實 crawl 會刪晒）`,
+          : `已載入 ${oddsBoard().length} 匹馬賠率走勢、賽果 ${state.results.length} 列（而家仲係示範假數據；抄到官方啡格先會換走）`,
         "ok"
       );
     } catch (err) {
@@ -231,8 +231,8 @@
       : "rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100";
     const overlay = " 即時欄由你部機直接問馬會 GraphQL（CORS *，約 4 秒一轉），唔使等 git push。時間點／走勢 CSV 仍然約 2 分鐘先上 GitHub Pages。";
     el.textContent = (live
-      ? "數據來源：真實馬會紀錄。示範假數據已喺第一次成功 crawl 時全部刪除，策略回測只用真實場次。"
-      : "數據來源：示範假數據。等星期三（或任何真賽日）第一次抄到馬會賠率／賽果，就會自動刪晒呢批示範，之後只顯示真實紀錄。") + overlay;
+      ? "數據來源：真實馬會紀錄。示範假數據已喺抄到官方啡格之後刪除，策略回測只用真實場次。"
+      : "數據來源：示範假數據。11 月 18 日嗰批真實數未有官方啡格，唔夠用嚟換走示範。之後再 record，要抄到馬會啡格（標記 3）先會刪示範。未夠格嘅真實數會暫存 live_inbox，唔入回測表。") + overlay;
   }
 
   function updateGhBadge() {

@@ -1,5 +1,5 @@
 {
-  "origin": "live",
-  "note": "demo sample deleted after the first live HKJC capture",
-  "updated_at": "2026-11-18T18:24:19+08:00"
+  "origin": "demo",
+  "note": "sample data from generate_sample_data.py; kept until a live capture stores official 啡格",
+  "updated_at": "2026-11-19T10:58:58+08:00"
 }

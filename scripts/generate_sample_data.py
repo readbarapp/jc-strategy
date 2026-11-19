@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
 
 from src.csv_store import copy_to_docs, rebuild_odds_board, set_dataset_origin, write_rows  # noqa: E402
 from src.odds_math import GRID_BROWN, GRID_NONE, is_brown_grid, win_drop_pct  # noqa: E402
-from src.schema import ODDS_FIELDS, RESULTS_FIELDS  # noqa: E402
+from src.schema import ODDS_FIELDS, RESULTS_FIELDS, TICK_FIELDS  # noqa: E402
 from src.timeutil import combine_hk  # noqa: E402
 
 HORSES = [
@@ -161,6 +161,7 @@ def generate(seed: int = 20261116) -> None:
                             "is_brown_grid": "true" if grid == GRID_BROWN else "false",
                             "hkjc_grid": grid,
                             "place_grid": GRID_BROWN if grid == GRID_BROWN else GRID_NONE,
+                            "brown_hold_seconds": 30 if grid == GRID_BROWN else 0,
                         }
                     )
 
@@ -181,10 +182,11 @@ def generate(seed: int = 20261116) -> None:
 
     write_rows(ROOT / "data" / "odds_snapshots.csv", ODDS_FIELDS, odds_rows)
     write_rows(ROOT / "data" / "race_results.csv", RESULTS_FIELDS, result_rows)
+    write_rows(ROOT / "data" / "odds_ticks.csv", TICK_FIELDS, [])
     rebuild_odds_board()
     set_dataset_origin(
         "demo",
-        "sample data from generate_sample_data.py; deleted automatically on first live HKJC capture",
+        "sample data from generate_sample_data.py; kept until a live capture stores official 啡格",
     )
     copy_to_docs()
     print(f"Wrote {len(odds_rows)} odds rows and {len(result_rows)} result rows")
