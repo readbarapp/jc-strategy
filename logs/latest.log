@@ -469,3 +469,6 @@
 2026-11-21 23:33:21 HKT [INFO] scraper_runner command=auto date=2026-11-21 tz=Asia/Hong_Kong
 2026-11-21 23:33:23 HKT [INFO] No Hong Kong race meeting on 2026-11-21
 2026-11-21 23:33:23 HKT [INFO] 今日香港無賽馬日
+2026-11-22 00:33:35 HKT [INFO] scraper_runner command=auto date=2026-11-22 tz=Asia/Hong_Kong
+2026-11-22 00:33:36 HKT [INFO] Detected HK race day 2026-11-22 ST (11 races)
+2026-11-22 00:33:36 HKT [INFO] 偵測到 ST 賽馬日，第一場 2026-11-22 12:30，監控窗 2026-11-22 12:10 開始；距離仍有 696 分鐘，稍後排程再啟動
