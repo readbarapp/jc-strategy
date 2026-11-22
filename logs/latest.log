@@ -1240,3 +1240,10 @@
 2026-11-22 15:35:04 HKT [INFO] Wrote 12 checkpoint rows from 12 ticks (races=[1, 2, 3, 4, 5, 6])
 2026-11-22 15:35:14 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
 2026-11-22 15:35:14 HKT [INFO] Wrote 12 checkpoint rows from 12 ticks (races=[1, 2, 3, 4, 5, 6])
+2026-11-22 15:35:54 HKT [WARN] git push attempt 1 failed: fatal: unable to access 'https://github.com/readbarapp/jc-strategy/': Could not resolve host: github.com
+
+2026-11-22 15:36:14 HKT [WARN] git push attempt 2 failed: fatal: unable to access 'https://github.com/readbarapp/jc-strategy/': Could not resolve host: github.com
+
+2026-11-22 15:36:34 HKT [WARN] git push attempt 3 failed: fatal: unable to access 'https://github.com/readbarapp/jc-strategy/': Could not resolve host: github.com
+
+2026-11-22 15:36:36 HKT [INFO] Pushed data commit to main
