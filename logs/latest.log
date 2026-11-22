@@ -1615,3 +1615,22 @@
 2026-11-22 18:31:53 HKT [INFO] Results R10: 14 runners
 2026-11-22 18:31:54 HKT [INFO] Results R11: 4 runners
 2026-11-22 18:31:54 HKT [INFO] Backfilled 85 T-0 rows from official SP
+2026-11-22 18:37:37 HKT [INFO] scraper_runner command=auto date=2026-11-22 tz=Asia/Hong_Kong
+2026-11-22 18:37:37 HKT [INFO] Detected HK race day 2026-11-22 ST (11 races)
+2026-11-22 18:37:37 HKT [INFO] Race day 2026-11-22 ST first post 2026-11-22 12:30 — start monitor
+2026-11-22 18:37:37 HKT [INFO] Detected HK race day 2026-11-22 ST (11 races)
+2026-11-22 18:37:37 HKT [INFO] Restored 507 captured checkpoints from CSV for continuation
+2026-11-22 18:37:37 HKT [INFO] High-frequency monitor start 2026-11-22 ST interval=10s until 2026-11-22 18:50:00
+2026-11-22 18:37:38 HKT [INFO] All remaining races cancelled or resulted — stop odds loop
+2026-11-22 18:37:38 HKT [INFO] Odds loop finished — harvesting official results
+2026-11-22 18:37:39 HKT [INFO] Results R1: 14 runners
+2026-11-22 18:37:41 HKT [INFO] Results R2: 14 runners
+2026-11-22 18:37:42 HKT [INFO] Results R3: 14 runners
+2026-11-22 18:37:44 HKT [INFO] Results R4: 14 runners
+2026-11-22 18:37:45 HKT [INFO] Results R5: 14 runners
+2026-11-22 18:37:47 HKT [INFO] Results R6: 12 runners
+2026-11-22 18:37:50 HKT [INFO] Results R7: 6 runners
+2026-11-22 18:37:52 HKT [INFO] Results R8: 9 runners
+2026-11-22 18:37:53 HKT [INFO] Results R9: 10 runners
+2026-11-22 18:37:55 HKT [INFO] Results R10: 14 runners
+2026-11-22 18:37:55 HKT [INFO] Results R11: 4 runners
