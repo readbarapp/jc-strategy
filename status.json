@@ -1,6 +1,6 @@
 {
   "state": "running",
-  "hk_time": "2026-11-22 15:53:50",
+  "hk_time": "2026-11-22 15:55:58",
   "is_race_day": true,
   "venue": "ST",
   "race_date": "2026-11-22",
@@ -13,9 +13,9 @@
     6,
     7
   ],
-  "last_sync": "2026-11-22 15:53:50",
+  "last_sync": "2026-11-22 15:55:58",
   "last_message": "已監控場次 [1, 2, 3, 4, 5, 6, 7]",
   "workflow": "hkjc_monitor",
   "error": "",
-  "updated_at": "2026-11-22T15:53:50+08:00"
+  "updated_at": "2026-11-22T15:55:58+08:00"
 }
