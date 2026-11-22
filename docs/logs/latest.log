@@ -1132,3 +1132,13 @@
 2026-11-22 15:12:05 HKT [INFO] Pushed data commit to main
 2026-11-22 15:14:08 HKT [INFO] Pushed data commit to main
 2026-11-22 15:16:11 HKT [INFO] Pushed data commit to main
+2026-11-22 15:18:13 HKT [INFO] Pushed data commit to main
+2026-11-22 15:19:05 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 15:19:16 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 15:19:26 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 15:19:37 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 15:19:47 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 15:19:58 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 15:19:58 HKT [INFO] Wrote 12 checkpoint rows from 12 ticks (races=[1, 2, 3, 4, 5, 6])
+2026-11-22 15:20:08 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 15:20:19 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
