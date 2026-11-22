@@ -1511,3 +1511,17 @@
 2026-11-22 16:57:11 HKT [INFO] Pushed data commit to main
 2026-11-22 16:59:03 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
 2026-11-22 16:59:14 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 16:59:16 HKT [INFO] Pushed data commit to main
+2026-11-22 16:59:26 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 16:59:37 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 16:59:48 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 16:59:58 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 16:59:58 HKT [INFO] Wrote 9 checkpoint rows from 9 ticks (races=[1, 2, 3, 4, 5, 6, 7, 8, 9])
+2026-11-22 17:00:08 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 17:00:20 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 17:00:30 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 17:00:41 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 17:00:51 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 17:01:02 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 17:01:13 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 17:01:23 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
