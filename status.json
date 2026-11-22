@@ -1,13 +1,13 @@
 {
   "state": "idle",
-  "hk_time": "2026-11-22 20:37:38",
+  "hk_time": "2026-11-22 21:48:29",
   "is_race_day": true,
   "venue": "ST",
   "race_date": "2026-11-22",
   "races_monitored_today": [],
-  "last_sync": "2026-11-22 20:37:38",
+  "last_sync": "2026-11-22 21:48:29",
   "last_message": "賽果寫入 0 列",
   "workflow": "hkjc_monitor",
   "error": "",
-  "updated_at": "2026-11-22T20:37:38+08:00"
+  "updated_at": "2026-11-22T21:48:29+08:00"
 }
