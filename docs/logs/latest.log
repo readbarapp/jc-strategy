@@ -475,3 +475,6 @@
 2026-11-22 01:01:38 HKT [INFO] scraper_runner command=auto date=2026-11-22 tz=Asia/Hong_Kong
 2026-11-22 01:01:39 HKT [INFO] Detected HK race day 2026-11-22 ST (11 races)
 2026-11-22 01:01:39 HKT [INFO] 偵測到 ST 賽馬日，第一場 2026-11-22 12:30，監控窗 2026-11-22 12:10 開始；距離仍有 668 分鐘，稍後排程再啟動
+2026-11-22 09:57:05 HKT [INFO] scraper_runner command=auto date=2026-11-22 tz=Asia/Hong_Kong
+2026-11-22 09:57:05 HKT [INFO] Detected HK race day 2026-11-22 ST (11 races)
+2026-11-22 09:57:05 HKT [INFO] 偵測到 ST 賽馬日，第一場 2026-11-22 12:30，監控窗 2026-11-22 12:10 開始；距離仍有 133 分鐘，稍後排程再啟動
