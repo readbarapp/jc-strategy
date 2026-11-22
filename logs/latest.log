@@ -1592,3 +1592,6 @@
 2026-11-22 17:11:32 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
 2026-11-22 17:11:42 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
 2026-11-22 17:11:53 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 17:12:06 HKT [INFO] Pushed data commit to main
+2026-11-22 17:12:06 HKT [WARN] Cannot self-dispatch monitor: missing GITHUB_REPOSITORY or GITHUB_TOKEN
+2026-11-22 17:12:06 HKT [WARN] 已接近 6 小時上限；若未能自動續跑，半小時排程會接
