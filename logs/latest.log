@@ -604,3 +604,6 @@
 2026-11-22 12:30:57 HKT [INFO] Wrote 14 checkpoint rows from 14 ticks (races=[1])
 2026-11-22 12:31:08 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
 2026-11-22 12:31:09 HKT [INFO] Wrote 14 checkpoint rows from 14 ticks (races=[1])
+2026-11-22 12:31:10 HKT [INFO] Pushed data commit to main
+2026-11-22 12:31:20 HKT [ERROR] getJSON winplaodds JSON decode failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-11-22 12:31:20 HKT [INFO] Wrote 14 checkpoint rows from 14 ticks (races=[1])
