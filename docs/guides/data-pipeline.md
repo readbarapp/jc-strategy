@@ -145,9 +145,9 @@ GET https://racing.hkjc.com/racing/information/Chinese/Racing/LocalResults.aspx
 | 第一格 | 抄法 |
 | --- | --- |
 | `獨贏` 或 `WIN` | 該行馬號 + 金額（例如 `52.50`）→ `win_dividend`（每 $10） |
-| `位置` 或 `PLACE` | 該行馬號 + 金額 → `placedividend` |
+| `位置` 或 `PLACE` | 該行馬號 + 金額 → `placedividend`。官方表用 `rowspan`，亞／季行第一格係馬號而唔係空白，都要繼續當位置派彩 |
 
-未中嘅馬派彩寫 `0`。呢兩個數字先係回測盈虧來源。
+未中嘅馬派彩寫 `0`。獨贏只得冠軍有數；位置 7 匹或以上要抄 3 個、4–6 匹抄 2 個。呢兩個數字先係回測盈虧來源。
 
 GraphQL 後備：`resultMeetings`，`resPools` 入面 `oddsType` WIN／PLA 嘅 `dividends[].winComb`（馬號）同 `div`（派彩）。呢條後備好多時 **冇名次**，所以優先用 HTML 成績表。
 

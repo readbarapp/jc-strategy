@@ -912,6 +912,28 @@ class HKJCClient:
         except ValueError:
             return 0
 
+    @staticmethod
+    def _parse_money(text) -> float | None:
+        cleaned = str(text or "").replace(",", "").replace("$", "").strip()
+        if not cleaned:
+            return None
+        try:
+            value = float(cleaned)
+        except ValueError:
+            match = re.search(r"(\d+(?:\.\d+)?)", cleaned)
+            if not match:
+                return None
+            value = float(match.group(1))
+        return value if value > 0 else None
+
+    @staticmethod
+    def _single_horse_no(text) -> int | None:
+        token = str(text or "").strip()
+        if not re.fullmatch(r"\d{1,2}", token):
+            return None
+        horse_no = int(token)
+        return horse_no if 1 <= horse_no <= 14 else None
+
     def _parse_dividend_table(self, soup: BeautifulSoup) -> tuple[dict[int, float], dict[int, float]]:
         win_div: dict[int, float] = {}
         pla_div: dict[int, float] = {}
@@ -928,27 +950,39 @@ class HKJCClient:
             cells = [c.get_text(" ", strip=True) for c in tr.find_all(["td", "th"])]
             if not cells:
                 continue
-            label = re.sub(r"\s+", "", cells[0] or "")
-            upper = label.upper()
-            if label in {"獨贏"} or upper == "WIN":
+            first = re.sub(r"\s+", "", cells[0] or "")
+            upper = first.upper()
+            comb_idx = 1
+            pay_idx = -1
+            if first in {"獨贏"} or upper == "WIN":
                 current_pool = "WIN"
-            elif label in {"位置"} or upper == "PLACE":
+            elif first in {"位置"} or upper == "PLACE":
                 current_pool = "PLA"
-            elif label:
+            elif first in {"彩池", "勝出組合"} or first.startswith("派彩"):
+                continue
+            elif current_pool in {"WIN", "PLA"} and self._single_horse_no(first):
+                # Official LocalResults uses rowspan on 位置, so 2nd/3rd rows
+                # start with the horse number instead of an empty pool cell.
+                comb_idx = 0
+                pay_idx = 1 if len(cells) > 1 else 0
+            elif first:
                 # 位置Q / 連贏 / 二重彩… must not reuse 位置 horse numbers
                 current_pool = ""
-            numbers = [int(x) for x in re.findall(r"\b(\d{1,2})\b", " ".join(cells))]
-            money = re.findall(r"\$?\s*([0-9]+\.[0-9]+)", " ".join(cells))
-            if current_pool == "WIN" and numbers and money:
-                win_div[numbers[0]] = float(money[0])
-            elif current_pool == "PLA":
-                n = self._to_int(cells[1] if len(cells) > 1 else cells[0])
-                divs = re.findall(r"([0-9]+\.[0-9]+)", cells[-1] if cells else "")
-                if n and divs:
-                    pla_div[n] = float(divs[0])
-                elif numbers and money:
-                    for horse_no, amount in zip(numbers, money):
-                        pla_div[horse_no] = float(amount)
+                continue
+            elif current_pool not in {"WIN", "PLA"}:
+                continue
+            if current_pool not in {"WIN", "PLA"}:
+                continue
+            if comb_idx >= len(cells):
+                continue
+            horse_no = self._single_horse_no(cells[comb_idx])
+            amount = self._parse_money(cells[pay_idx] if cells else "")
+            if not horse_no or amount is None:
+                continue
+            if current_pool == "WIN":
+                win_div[horse_no] = amount
+            else:
+                pla_div[horse_no] = amount
         return win_div, pla_div
 
     @staticmethod

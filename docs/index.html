@@ -602,6 +602,8 @@
 舊版每個時間點都係「窗口一開就定格」，所以 T-15…T-0 都可能早咗幾十秒。而家系統會自己存每 10 秒一條路徑，到點先揀最接近嗰下；開跑格再用官方終賠校正。</p>
 <p><strong>馬會唔提供走勢，我點教系統？</strong><br />
 唔使盯盤。數據中心撳一隻馬就會見到 5 個時間點、官方終賠、同 10 秒路徑。你記得邊格獨贏，填上去撳「寫入更正」。終賠同 T-0 差 ≥ 10% 會喺表下面列出來。</p>
+<p><strong>我唔睇盤點核對數據？</strong><br />
+馬會唔公開開賽前走勢，所以 10 秒路徑無第二個官方檔。你核對官方成績表就得：<a href="https://racing.hkjc.com/racing/information/Chinese/Racing/LocalResults.aspx" target="_blank" rel="noreferrer">LocalResults</a> 嘅名次、終賠、獨贏／位置派彩。開跑格應接近終賠；位置前 2／3 名唔應係 0。</p>
 <p><strong>點解啡格馬只係跌 0.1？走勢圖點解一條橫線？</strong><br />
 馬會啡格係投注盤標記 <code>3</code>，唔係「跌一半」。例如 2026-11-22 沙田第一場源好運，開賽前 15 分鐘 2.8、開賽前 1 分鐘 2.6（跌約 7%），嗰下投注盤真係啡，但只閃過（持續 0 秒），策略唔當訊號。第四場紫荊飛躍 3.3→3.2（約 3%）而且啡格持續超過 3 分鐘，所以表上會標。獨贏多數只出到 1 個位小數，熱門可以幾分鐘同一個價；系統每 10 秒抄一次，盤唔郁就寫同一個數，圖先會長橫線。撳馬睇變盤次數同階梯線。</p>
             </div>
@@ -855,7 +857,7 @@ scraper_runner.py auto
 </tr>
 <tr>
 <td><code>位置</code> 或 <code>PLACE</code></td>
-<td>該行馬號 + 金額 → <code>placedividend</code></td>
+<td>該行馬號 + 金額 → <code>placedividend</code>。官方表 <code>rowspan</code>，亞／季行第一格係馬號都要繼續抄</td>
 </tr>
 </tbody>
 </table>
@@ -1088,9 +1090,9 @@ scraper_runner.py auto
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <script src="./assets/core.js?v=20261124a"></script>
-  <script src="./assets/engine.js?v=20261124a"></script>
-  <script src="./assets/hkjc-live.js?v=20261124a"></script>
-  <script src="./assets/app.js?v=20261124a"></script>
+  <script src="./assets/core.js?v=20261124b"></script>
+  <script src="./assets/engine.js?v=20261124b"></script>
+  <script src="./assets/hkjc-live.js?v=20261124b"></script>
+  <script src="./assets/app.js?v=20261124b"></script>
 </body>
 </html>

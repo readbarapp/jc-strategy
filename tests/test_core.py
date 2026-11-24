@@ -725,6 +725,87 @@ def test_t0_waits_for_post_then_refreshes_closing_odds():
         monitor_mod.now_hk = original
 
 
+def test_results_html_reads_place_rowspan():
+    html = """
+    <table>
+      <tr><td>名次</td><td>馬號</td><td>馬名</td><td>獨贏 賠率</td></tr>
+      <tr><td>1</td><td>6</td><td>三強 (K229)</td><td>13</td></tr>
+      <tr><td>2</td><td>12</td><td>爆熱 (G368)</td><td>8.8</td></tr>
+      <tr><td>3</td><td>2</td><td>源好運 (K389)</td><td>2.8</td></tr>
+    </table>
+    <table>
+      <thead>
+        <tr><td colspan="3">派彩</td></tr>
+        <tr><td>彩池</td><td>勝出組合</td><td>派彩 (HK$)</td></tr>
+      </thead>
+      <tbody>
+        <tr><td rowspan="1">獨贏</td><td>6</td><td>131.00</td></tr>
+        <tr><td rowspan="3">位置</td><td>6</td><td>35.00</td></tr>
+        <tr><td>12</td><td>29.50</td></tr>
+        <tr><td>2</td><td>14.00</td></tr>
+        <tr><td rowspan="1">連贏</td><td>6,12</td><td>564.50</td></tr>
+        <tr><td rowspan="3">位置Q</td><td>6,12</td><td>176.50</td></tr>
+        <tr><td>2,6</td><td>73.00</td></tr>
+        <tr><td>2,12</td><td>57.00</td></tr>
+      </tbody>
+    </table>
+    """
+
+    class FakeResp:
+        text = html
+
+    client = HKJCClient()
+    client._request = lambda *args, **kwargs: FakeResp()
+    rows = client._results_html(Meeting("2026-11-22", "ST"), 1)
+    by_no = {int(r["horse_no"]): r for r in rows}
+    assert by_no[6]["win_dividend"] == 131.0
+    assert by_no[6]["placedividend"] == 35.0
+    assert by_no[12]["placedividend"] == 29.5
+    assert by_no[2]["placedividend"] == 14.0
+    assert by_no[2]["final_sp"] == 2.8
+
+
+def test_missing_place_payouts_flags_second_and_third():
+    from src.results_audit import missing_place_payouts
+
+    gaps = missing_place_payouts(
+        [
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "1", "horse_no": "6",
+             "finish_rank": "1", "placedividend": "35"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "1", "horse_no": "12",
+             "finish_rank": "2", "placedividend": "0"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "1", "horse_no": "2",
+             "finish_rank": "3", "placedividend": "0"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "1", "horse_no": "8",
+             "finish_rank": "4", "placedividend": "0"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "1", "horse_no": "9",
+             "finish_rank": "5", "placedividend": "0"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "1", "horse_no": "3",
+             "finish_rank": "6", "placedividend": "0"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "1", "horse_no": "11",
+             "finish_rank": "7", "placedividend": "0"},
+        ]
+    )
+    assert {(int(r["horse_no"]), int(float(r["finish_rank"]))) for r in gaps} == {(12, 2), (2, 3)}
+    six_runner = missing_place_payouts(
+        [
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "7", "horse_no": "1",
+             "finish_rank": "1", "placedividend": "10.1"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "7", "horse_no": "2",
+             "finish_rank": "2", "placedividend": "16"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "7", "horse_no": "4",
+             "finish_rank": "3", "placedividend": "0"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "7", "horse_no": "3",
+             "finish_rank": "4", "placedividend": "0"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "7", "horse_no": "5",
+             "finish_rank": "5", "placedividend": "0"},
+            {"race_date": "2026-11-22", "venue": "ST", "race_no": "7", "horse_no": "6",
+             "finish_rank": "6", "placedividend": "0"},
+        ]
+    )
+    assert six_runner == []
+
+
 def test_results_html_reads_sp_and_skips_qin_place():
     html = """
     <table>
@@ -1072,6 +1153,8 @@ if __name__ == "__main__":
     test_race_event_guards()
     test_snapshot_skips_cancelled_scratch_and_blank_odds()
     test_t0_waits_for_post_then_refreshes_closing_odds()
+    test_results_html_reads_place_rowspan()
+    test_missing_place_payouts_flags_second_and_third()
     test_results_html_reads_sp_and_skips_qin_place()
     test_official_sp_backfills_t0_and_brown()
     test_drop_date_removes_only_that_day()
