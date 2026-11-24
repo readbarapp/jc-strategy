@@ -21,7 +21,12 @@
   async function graphql(query, variables) {
     const res = await fetch(GRAPHQL_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "Cache-Control": "no-cache",
+      },
       body: JSON.stringify({ query, variables }),
     });
     if (!res.ok) throw new Error("HKJC GraphQL HTTP " + res.status);
