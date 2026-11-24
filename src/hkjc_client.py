@@ -381,6 +381,8 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*, text/html",
     "Origin": "https://bet.hkjc.com",
     "Referer": "https://bet.hkjc.com/racing",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
 }
 
 
@@ -716,6 +718,7 @@ class HKJCClient:
             "venue": meeting.venue,
             "start": race_no,
             "end": race_no,
+            "_": int(time.time() * 1000),
         }
         response = self._request("GET", JSON_ODDS_URL, params=params)
         if response is None:

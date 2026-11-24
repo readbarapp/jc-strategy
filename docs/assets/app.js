@@ -484,23 +484,26 @@
     const byCp = {};
     snaps.forEach((row) => { byCp[String(row.checkpoint).toUpperCase()] = row; });
     $("horse-audit-cps").innerHTML =
-      `<table class="grid-table text-xs"><thead><tr><th>時間點</th><th>獨贏</th><th>格</th><th>位置</th><th>抄低時間</th><th>距開跑(分)</th></tr></thead><tbody>` +
-      order.map((cp) => {
+      `<table class="grid-table text-xs"><thead><tr><th>時間點</th><th>獨贏</th><th>對上</th><th>格</th><th>位置</th><th>抄低時間</th><th>距開跑(分)</th></tr></thead><tbody>` +
+      order.map((cp, i) => {
         const row = byCp[cp];
-        if (!row) return `<tr><td>${cp}</td><td colspan="5" class="text-slate-500">未抄到</td></tr>`;
-        return `<tr><td>${cp}</td><td class="${gridCellClass(row.hkjc_grid)}">${fmtOdds(row.win_odds)}</td><td class="${gridCellClass(row.hkjc_grid)}">${gridLabel(row.hkjc_grid)}</td><td>${fmtOdds(row.place_odds)}</td><td class="mono">${row.capture_timestamp || "—"}</td><td class="mono">${row.minutes_to_post || "—"}</td></tr>`;
+        if (!row) return `<tr><td>${cp}</td><td colspan="6" class="text-slate-500">未抄到</td></tr>`;
+        const prev = i ? byCp[order[i - 1]] : null;
+        return `<tr><td>${cp}</td><td class="${gridCellClass(row.hkjc_grid)}">${fmtOdds(row.win_odds)}</td><td class="mono">${oddsMoveLabel(prev && prev.win_odds, row.win_odds)}</td><td class="${gridCellClass(row.hkjc_grid)}">${gridLabel(row.hkjc_grid)}</td><td>${fmtOdds(row.place_odds)}</td><td class="mono">${row.capture_timestamp || "—"}</td><td class="mono">${row.minutes_to_post || "—"}</td></tr>`;
       }).join("") + "</tbody></table>";
     const holdEl = $("horse-audit-hold");
-    if (holdEl) holdEl.textContent = holdSummary(byCp["T-1"]);
+    if (holdEl) holdEl.textContent = holdSummary(byCp);
+    const pathEl = $("horse-audit-path");
+    if (pathEl) pathEl.textContent = pathStats(ticks);
     drawHorsePath(ticks, byCp);
     if (!ticks.length) {
       $("horse-audit-ticks").innerHTML = `<p class="text-[11px] text-slate-500">呢日未有 10 秒走勢（舊數據只得 5 個時間點）。下一個賽日起會開始存，你就唔使盯盤。</p>`;
     } else {
-      const last = ticks.slice(-12);
+      const changes = tickChangeRows(ticks);
       $("horse-audit-ticks").innerHTML =
-        `<p class="mb-1 text-[11px] text-slate-500">10 秒路徑（顯示最後 ${last.length} / ${ticks.length} 下）</p>` +
+        `<p class="mb-1 text-[11px] text-slate-500">10 秒路徑：只列出獨贏／位置／格色有變嘅 ${changes.length} / ${ticks.length} 下（中間冇變即係投注盤當時真係同一個價，唔係抄重）。</p>` +
         `<table class="grid-table text-xs"><thead><tr><th>時間</th><th>距開跑</th><th>獨贏</th><th>格</th><th>位置</th></tr></thead><tbody>` +
-        last.map((row) => `<tr><td class="mono">${row.capture_timestamp}</td><td class="mono">${row.minutes_to_post}</td><td class="${gridCellClass(row.hkjc_grid)}">${fmtOdds(row.win_odds)}</td><td class="${gridCellClass(row.hkjc_grid)}">${gridLabel(row.hkjc_grid)}</td><td>${fmtOdds(row.place_odds)}</td></tr>`).join("") +
+        changes.map((row) => `<tr><td class="mono">${row.capture_timestamp}</td><td class="mono">${row.minutes_to_post}</td><td class="${gridCellClass(row.hkjc_grid)}">${fmtOdds(row.win_odds)}</td><td class="${gridCellClass(row.hkjc_grid)}">${gridLabel(row.hkjc_grid)}</td><td>${fmtOdds(row.place_odds)}</td></tr>`).join("") +
         "</tbody></table>";
     }
   }
@@ -510,18 +513,87 @@
     return "#e4c36a";
   }
 
-  function holdSummary(t1) {
+  function oddsMoveLabel(from, to) {
+    const a = num(from, NaN);
+    const b = num(to, NaN);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0) return "—";
+    if (a === b) return "＝";
+    const pct = (a - b) / a * 100;
+    const arrow = pct > 0 ? "↓" : "↑";
+    return `${arrow}${Math.abs(pct).toFixed(1)}%`;
+  }
+
+  function pathStats(ticks) {
+    if (!ticks || !ticks.length) return "";
+    const odds = ticks.map((row) => num(row.win_odds, NaN)).filter(Number.isFinite);
+    if (!odds.length) return "";
+    const unique = [];
+    odds.forEach((value) => {
+      const key = value.toFixed(1);
+      if (!unique.includes(key)) unique.push(key);
+    });
+    let changes = 0;
+    let brown = 0;
+    let brownSame = 0;
+    ticks.forEach((row, i) => {
+      const grid = window.HKJCEngine.parseHkjcGrid(row.hkjc_grid);
+      const cur = num(row.win_odds, NaN);
+      if (grid === "brown") {
+        brown += 1;
+        if (i > 0 && cur === num(ticks[i - 1].win_odds, NaN)) brownSame += 1;
+      }
+      if (i > 0 && cur !== num(ticks[i - 1].win_odds, NaN)) changes += 1;
+    });
+    const start = odds[0].toFixed(1);
+    const end = odds[odds.length - 1].toFixed(1);
+    const lo = Math.min(...odds).toFixed(1);
+    const hi = Math.max(...odds).toFixed(1);
+    let text = `${ticks.length} 下（約 10 秒一格）· 獨贏 ${start}→${end}（區間 ${lo}–${hi}，${unique.length} 個價）· 變盤 ${changes} 次 · 官方啡格 ${brown} 下`;
+    if (brownSame) text += `（其中 ${brownSame} 下賠率冇郁都繼續啡）`;
+    text += "。馬會獨贏多數只出到 1 個位小數，熱門可以幾分鐘同一個價，圖上會長橫線。";
+    return text;
+  }
+
+  function tickChangeRows(ticks) {
+    const out = [];
+    (ticks || []).forEach((row, i) => {
+      if (!i) {
+        out.push(row);
+        return;
+      }
+      const prev = ticks[i - 1];
+      const sameOdds = String(row.win_odds) === String(prev.win_odds)
+        && String(row.place_odds) === String(prev.place_odds);
+      const sameGrid = window.HKJCEngine.parseHkjcGrid(row.hkjc_grid)
+        === window.HKJCEngine.parseHkjcGrid(prev.hkjc_grid);
+      if (!sameOdds || !sameGrid) out.push(row);
+    });
+    const last = ticks && ticks[ticks.length - 1];
+    if (last && out[out.length - 1] !== last) out.push(last);
+    return out;
+  }
+
+  function holdSummary(byCp) {
+    const t1 = byCp && byCp["T-1"];
+    const t15 = byCp && byCp["T-15"];
+    const t5 = byCp && byCp["T-5"];
     const need = currentHoldNeed();
     if (!t1) return "未有開賽前 1 分鐘紀錄。通知／策略只睇你揀嘅時間點當刻格色，再加連續秒數。";
     const grid = window.HKJCEngine.parseHkjcGrid(t1.hkjc_grid);
     const hold = num(t1.brown_hold_seconds, NaN);
     const heldTxt = Number.isFinite(hold) ? `連續 ${hold} 秒` : "舊數據冇 10 秒路徑，唔知持續幾耐";
+    const from15 = t15 ? `開賽前 15 分鐘 ${fmtOdds(t15.win_odds)} → 開賽前 1 分鐘 ${fmtOdds(t1.win_odds)}（${oddsMoveLabel(t15.win_odds, t1.win_odds)}）` : `開賽前 1 分鐘 ${fmtOdds(t1.win_odds)}`;
+    const from5 = t5 ? `；對上一個時間點開賽前 5 分鐘 ${fmtOdds(t5.win_odds)}（${oddsMoveLabel(t5.win_odds, t1.win_odds)}）` : "";
     if (grid === "brown") {
-      if (!Number.isFinite(hold)) return `開賽前 1 分鐘投注盤顯示啡格（${heldTxt}）。`;
-      if (need <= 0 || hold >= need) return `開賽前 1 分鐘投注盤顯示啡格，${heldTxt}（門檻 ${need}s）→ 會當訊號。`;
-      return `開賽前 1 分鐘投注盤顯示啡格，但只係 ${heldTxt}（門檻 ${need}s）→ 當閃過，唔發通知。`;
+      const flash = Number.isFinite(hold) && need > 0 && hold < need;
+      const signal = !Number.isFinite(hold)
+        ? `開賽前 1 分鐘投注盤顯示啡格（${heldTxt}）`
+        : (flash
+          ? `開賽前 1 分鐘投注盤顯示啡格，但只係 ${heldTxt}（門檻 ${need}s）→ 當閃過，唔發通知`
+          : `開賽前 1 分鐘投注盤顯示啡格，${heldTxt}（門檻 ${need}s）→ 會當訊號`);
+      return `${from15}${from5}。${signal}。馬會啡格可以只係跌 0.1 都繼續標，唔等於急跌一半。`;
     }
-    return "開賽前 1 分鐘投注盤冇啡格。紅格／綠格唔會存。之前閃過啡格都唔會通知，除非你揀嘅時間點當刻仍然係啡格而且夠持續。";
+    return `${from15}${from5}。開賽前 1 分鐘投注盤冇啡格。紅格／綠格唔會存。之前閃過啡格都唔會通知，除非你揀嘅時間點當刻仍然係啡格而且夠持續。`;
   }
 
   function drawHorsePath(ticks, byCp) {
@@ -555,6 +627,18 @@
       }
       return;
     }
+    const changePts = series.filter((p, i) => {
+      if (!i) return true;
+      const prev = series[i - 1];
+      return p.y !== prev.y || p.grid !== prev.grid;
+    });
+    const stair = [];
+    series.forEach((p, i) => {
+      if (i && series[i - 1].y !== p.y) {
+        stair.push({ x: p.x, y: series[i - 1].y, grid: series[i - 1].grid });
+      }
+      stair.push(p);
+    });
     wrap.classList.remove("hidden");
     if (state.pathChart) state.pathChart.destroy();
     state.pathChart = new Chart(canvas.getContext("2d"), {
@@ -562,17 +646,25 @@
       data: {
         datasets: [
           {
-            label: tickPts.length ? "獨贏（10 秒）" : "獨贏（時間點）",
-            data: series,
+            label: tickPts.length ? "獨贏（10 秒，階梯）" : "獨贏（時間點）",
+            data: stair,
             parsing: false,
             borderColor: "rgba(228,195,106,0.85)",
             backgroundColor: "transparent",
-            tension: 0.2,
-            pointRadius: tickPts.length ? 3 : 5,
-            pointHoverRadius: 6,
-            pointBackgroundColor: series.map((p) => gridStroke(p.grid)),
-            pointBorderColor: series.map((p) => gridStroke(p.grid)),
+            tension: 0,
+            pointRadius: 0,
+            pointHoverRadius: 0,
             borderWidth: 2,
+          },
+          {
+            label: "變盤／啡格",
+            data: changePts,
+            parsing: false,
+            showLine: false,
+            pointRadius: changePts.map((p) => (p.grid === "brown" ? 5 : 3)),
+            pointHoverRadius: 7,
+            pointBackgroundColor: changePts.map((p) => gridStroke(p.grid)),
+            pointBorderColor: changePts.map((p) => gridStroke(p.grid)),
           },
           {
             label: "時間點",
@@ -620,6 +712,7 @@
             title: { display: true, text: "獨贏賠率", color: "#94a3b8" },
             ticks: { color: "#94a3b8" },
             grid: { color: "rgba(255,255,255,0.06)" },
+            grace: "12%",
           },
         },
       },
@@ -787,8 +880,8 @@
       if ($("board-legend")) {
         const base =
           state.tableSource === "place"
-            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。只標<strong class=\"text-amber-200\">啡格</strong>；紅／綠唔存。即時欄由瀏覽器直接問馬會 GraphQL（約 4 秒），唔經 git。"
-            : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。只標<strong class=\"text-amber-200\">啡格</strong>（標記 3）；紅／綠當無色。即時欄由瀏覽器直接問馬會（約 4 秒），時間點／走勢仍然靠 Actions 存檔。";
+            ? "呢張表淨係<strong class=\"text-slate-300\">位置賠率</strong>（馬會 PLA 彩池）。只標<strong class=\"text-amber-200\">啡格</strong>；紅／綠唔存。即時欄由瀏覽器直接問馬會 GraphQL（約 4 秒），唔經 git。啡格可以只係跌 0.1。"
+            : "呢張表淨係<strong class=\"text-slate-300\">獨贏賠率</strong>（馬會 WIN 彩池）。只標<strong class=\"text-amber-200\">啡格</strong>（標記 3）；紅／綠當無色。啡格＝投注盤當時標咗，<strong class=\"text-slate-300\">可以只係 2.8→2.6</strong>，唔等於急跌一半。時間點下面嘅 % 係對上一個時間點。熱門多數幾分鐘同一個價，走勢圖會長橫線。";
         const note = strategyLegendNote();
         $("board-legend").innerHTML = note ? base + " " + note : base;
       }
@@ -806,9 +899,14 @@
         $("data-body").innerHTML = slice
           .map((row) => {
             const liveTd = `<td class="${gridCellClass(row.live_grid)}">${row.live_odds == null || row.live_odds === "" ? "—" : fmtOdds(row.live_odds)}</td>`;
-            const cells = ODDS_BOARD_COLS.map((c) => {
+            const cells = ODDS_BOARD_COLS.map((c, i) => {
               const brown = c.brownKey && isTrue(row[c.brownKey]);
-              return `<td class="${gridCellClass(row[c.gridKey], brown)}">${fmtOdds(row[c.key])}</td>`;
+              const prev = i ? ODDS_BOARD_COLS[i - 1] : null;
+              const move = prev ? oddsMoveLabel(row[prev.key], row[c.key]) : "";
+              const note = move && move !== "—" && move !== "＝"
+                ? `<div class="text-[10px] leading-tight opacity-80">${move}</div>`
+                : "";
+              return `<td class="${gridCellClass(row[c.gridKey], brown)}">${fmtOdds(row[c.key])}${note}</td>`;
             }).join("");
             const flag = row.brown_at
               ? `<td class="cell-brown">${row.brown_at}</td>`

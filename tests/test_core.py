@@ -415,6 +415,87 @@ def test_winplaodds_string_keeps_pools_apart():
     assert HKJCClient._grid_from_odds_node({"oddsDropValue": 0, "hotFavourite": False}) == "none"
 
 
+def test_odds_json_sends_cache_buster():
+    captured: dict = {}
+    client = HKJCClient()
+    assert "no-cache" in client.session.headers.get("Cache-Control", "").lower()
+
+    class Fake:
+        def json(self):
+            return {"OUT": "WIN;1=2.8=3#PLA;1=1.4=0"}
+
+    def fake_request(method, url, **kwargs):
+        captured["method"] = method
+        captured["url"] = url
+        captured["params"] = kwargs.get("params") or {}
+        return Fake()
+
+    client._request = fake_request  # type: ignore[method-assign]
+    meeting = Meeting(
+        race_date="2026-11-22",
+        venue="ST",
+        races=[RaceInfo(race_no=1, post_time="2026-11-22T13:00:00+08:00", runners={1: "源好運"})],
+    )
+    rows = client._odds_json(meeting, 1)
+    assert captured["method"] == "GET"
+    assert captured["params"]["type"] == "winplaodds"
+    assert captured["params"]["date"] == "2026-11-22"
+    assert captured["params"]["venue"] == "ST"
+    assert captured["params"]["start"] == 1
+    assert isinstance(captured["params"]["_"], int)
+    assert captured["params"]["_"] > 0
+    assert rows[0].win_odds == 2.8
+    assert rows[0].win_grid == "brown"
+
+
+def test_official_tiny_drop_is_still_brown_but_flash_is_not_a_signal():
+    """HKJC 啡格 can be 2.8→2.6. Official colour is real; strategy still needs a hold."""
+    rows = [
+        {
+            "race_date": "2026-11-22",
+            "venue": "ST",
+            "race_no": "1",
+            "horse_no": "2",
+            "horse_name": "源好運",
+            "checkpoint": "T-15",
+            "win_odds": 2.8,
+            "hkjc_grid": "none",
+        },
+        {
+            "race_date": "2026-11-22",
+            "venue": "ST",
+            "race_no": "1",
+            "horse_no": "2",
+            "horse_name": "源好運",
+            "checkpoint": "T-5",
+            "win_odds": 2.7,
+            "hkjc_grid": "none",
+        },
+        {
+            "race_date": "2026-11-22",
+            "venue": "ST",
+            "race_no": "1",
+            "horse_no": "2",
+            "horse_name": "源好運",
+            "checkpoint": "T-1",
+            "win_odds": 2.6,
+            "hkjc_grid": "brown",
+            "brown_hold_seconds": 0,
+        },
+    ]
+    board = pivot_odds(rows, 50, pool="win")
+    assert len(board) == 1
+    row = board[0]
+    assert row["odds_t15"] == 2.8
+    assert row["odds_t1"] == 2.6
+    assert row["grid_t1"] == "brown"
+    assert row["brown_t1"] == "true"
+    assert float(row["drop_t1"]) < 10
+    assert official_brown("brown", row["drop_t1"], 50)
+    assert not held_brown("brown", row["drop_t1"], 50, hold_seconds=0, hold_need=20)
+    assert held_brown("brown", 3.03, 50, hold_seconds=193, hold_need=20)
+
+
 def test_official_grid_beats_assumed_drop():
     rows = [
         {
@@ -690,6 +771,7 @@ def test_official_sp_backfills_t0_and_brown():
     original = {key: getattr(cs, key) for key in (
         "DATA_DIR", "DOCS_DATA", "ODDS_PATH", "RESULTS_PATH", "BOARD_PATH",
         "WIN_BOARD_PATH", "PLACE_BOARD_PATH", "ORIGIN_PATH", "DOCS_ORIGIN_PATH",
+        "TICK_PATH",
     )}
     root = Path(tempfile.mkdtemp())
     try:
@@ -702,6 +784,7 @@ def test_official_sp_backfills_t0_and_brown():
         cs.PLACE_BOARD_PATH = root / "place_board.csv"
         cs.ORIGIN_PATH = root / "dataset_origin.json"
         cs.DOCS_ORIGIN_PATH = root / "docs" / "dataset_origin.json"
+        cs.TICK_PATH = root / "odds_ticks.csv"
         cs.set_dataset_origin("live", "test")
         cs.upsert_odds([
             {"race_date": "2026-11-18", "venue": "HV", "race_no": "3", "checkpoint": "T-1",
@@ -738,6 +821,7 @@ def test_drop_date_removes_only_that_day():
     original = {key: getattr(cs, key) for key in (
         "DATA_DIR", "DOCS_DATA", "ODDS_PATH", "RESULTS_PATH", "BOARD_PATH",
         "WIN_BOARD_PATH", "PLACE_BOARD_PATH", "ORIGIN_PATH", "DOCS_ORIGIN_PATH",
+        "TICK_PATH",
     )}
     root = Path(tempfile.mkdtemp())
     try:
@@ -750,6 +834,7 @@ def test_drop_date_removes_only_that_day():
         cs.PLACE_BOARD_PATH = root / "place_board.csv"
         cs.ORIGIN_PATH = root / "dataset_origin.json"
         cs.DOCS_ORIGIN_PATH = root / "docs" / "dataset_origin.json"
+        cs.TICK_PATH = root / "odds_ticks.csv"
         cs.set_dataset_origin("live", "test")
         cs.upsert_odds([
             {"race_date": "2026-11-18", "venue": "ST", "race_no": "1", "checkpoint": "T-1",
@@ -881,6 +966,7 @@ def test_first_live_upsert_drops_demo_rows():
         "PLACE_BOARD_PATH": cs.PLACE_BOARD_PATH,
         "ORIGIN_PATH": cs.ORIGIN_PATH,
         "DOCS_ORIGIN_PATH": cs.DOCS_ORIGIN_PATH,
+        "TICK_PATH": cs.TICK_PATH,
     }
     root = Path(tempfile.mkdtemp())
     try:
@@ -893,6 +979,7 @@ def test_first_live_upsert_drops_demo_rows():
         cs.PLACE_BOARD_PATH = root / "place_board.csv"
         cs.ORIGIN_PATH = root / "dataset_origin.json"
         cs.DOCS_ORIGIN_PATH = root / "docs" / "dataset_origin.json"
+        cs.TICK_PATH = root / "odds_ticks.csv"
         cs.write_rows(
             cs.ODDS_PATH,
             ODDS_FIELDS,
@@ -947,7 +1034,10 @@ def test_first_live_upsert_drops_demo_rows():
 
 
 def test_restore_monitor_state_and_handoff_budget():
-    meeting = Meeting(race_date="2026-11-18", venue="HV")
+    odds = load_odds()
+    sample = next((row for row in odds if str(row.get("checkpoint") or "").upper() == "T-1"), None)
+    assert sample, "need at least one T-1 snapshot to restore monitor state"
+    meeting = Meeting(race_date=str(sample["race_date"]), venue=str(sample["venue"]))
     odds_map, captured, alerted, _written = restore_monitor_state(meeting)
     assert captured
     assert any(ck == "T-1" for _, _, ck in captured)
@@ -974,6 +1064,8 @@ if __name__ == "__main__":
     test_place_and_win_place_use_official_dividends_not_win_odds()
     test_ticket_pnl_scales_hkjc_ten_dollar_unit()
     test_winplaodds_string_keeps_pools_apart()
+    test_odds_json_sends_cache_buster()
+    test_official_tiny_drop_is_still_brown_but_flash_is_not_a_signal()
     test_official_grid_beats_assumed_drop()
     test_telegram_uses_own_checkpoint_odds_and_bet_label()
     test_plan_auto_uses_actual_post_times()
