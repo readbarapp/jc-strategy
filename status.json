@@ -1,13 +1,13 @@
 {
   "state": "idle",
-  "hk_time": "2026-11-24 23:28:30",
-  "is_race_day": false,
-  "venue": "",
-  "race_date": "2026-11-24",
+  "hk_time": "2026-11-25 00:36:50",
+  "is_race_day": true,
+  "venue": "HV",
+  "race_date": "2026-11-25",
   "races_monitored_today": [],
-  "last_sync": "2026-11-24 23:28:30",
-  "last_message": "今日香港無賽馬日",
+  "last_sync": "2026-11-25 00:36:49",
+  "last_message": "偵測到 HV 賽馬日，第一場 2026-11-25 18:40，監控窗 2026-11-25 18:20 開始；距離仍有 1063 分鐘，稍後排程再啟動",
   "workflow": "hkjc_monitor",
   "error": "",
-  "updated_at": "2026-11-24T23:28:30+08:00"
+  "updated_at": "2026-11-25T00:36:50+08:00"
 }
