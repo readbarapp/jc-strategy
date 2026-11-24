@@ -5,6 +5,7 @@ Commands:
   auto            Detect race day, then monitor or harvest results
   monitor         High-frequency odds capture until the last local race
   results         Official dividends / finishing order
+  repair-results  Re-fetch official LocalResults for stored race days
   once            Single odds snapshot
   test-telegram   Send a Telegram connectivity test
   demo-data       Regenerate sample historical CSVs for the dashboard
@@ -20,9 +21,16 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.config import load_config  # noqa: E402
+from src.config import brown_grid_threshold, load_config  # noqa: E402
 from src.logger import log, log_exception  # noqa: E402
-from src.monitor import mark_job_start, run_auto, run_monitor, run_once, run_results  # noqa: E402
+from src.monitor import (  # noqa: E402
+    mark_job_start,
+    refresh_stored_results,
+    run_auto,
+    run_monitor,
+    run_once,
+    run_results,
+)
 from src.status import write_status  # noqa: E402
 from src.telegram_notify import send_test  # noqa: E402
 from src.timeutil import format_hk, now_hk, today_hk  # noqa: E402
@@ -34,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
         "command",
         nargs="?",
         default="auto",
-        choices=["auto", "monitor", "results", "once", "test-telegram", "demo-data"],
+        choices=["auto", "monitor", "results", "repair-results", "once", "test-telegram", "demo-data"],
     )
     parser.add_argument("--date", dest="race_date", default="", help="YYYY-MM-DD (Hong Kong)")
     args = parser.parse_args(argv)
@@ -62,6 +70,13 @@ def main(argv: list[str] | None = None) -> int:
             run_monitor(cfg, race_date)
         elif args.command == "results":
             run_results(cfg, race_date)
+        elif args.command == "repair-results":
+            added = refresh_stored_results(threshold=brown_grid_threshold(cfg))
+            write_status(
+                state="idle",
+                last_sync=format_hk(now_hk()),
+                last_message=f"重抄官方賽果 {added} 列",
+            )
         elif args.command == "once":
             run_once(cfg, race_date)
         else:

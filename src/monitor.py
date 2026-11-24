@@ -185,6 +185,40 @@ def refresh_meeting_schedule(
     return latest, False
 
 
+def refresh_stored_results(client: HKJCClient | None = None, threshold: float = 50.0) -> int:
+    """Re-fetch official LocalResults for every race already in race_results.csv."""
+    client = client or HKJCClient()
+    existing = csv_store.load_results()
+    races = sorted(
+        {
+            (
+                str(row.get("race_date") or ""),
+                str(row.get("venue") or ""),
+                int(float(row.get("race_no") or 0)),
+            )
+            for row in existing
+            if row.get("race_date") and row.get("venue") and row.get("race_no")
+        }
+    )
+    all_rows: list[dict] = []
+    for race_date, venue, race_no in races:
+        try:
+            rows = client.fetch_results(Meeting(race_date=race_date, venue=venue), race_no)
+        except Exception as exc:
+            log_exception(f"repair results {race_date} {venue} R{race_no}", exc)
+            continue
+        if rows:
+            log(f"Repair results {race_date} {venue} R{race_no}: {len(rows)} runners")
+            all_rows.extend(rows)
+        time.sleep(0.35)
+    if not all_rows:
+        return 0
+    added = csv_store.upsert_results(all_rows)
+    csv_store.apply_official_sp(all_rows, threshold)
+    csv_store.copy_to_docs()
+    return added
+
+
 def collect_results(client: HKJCClient, meeting: Meeting, threshold: float = 50.0) -> int:
     all_rows: list[dict] = []
     for race in meeting.races:

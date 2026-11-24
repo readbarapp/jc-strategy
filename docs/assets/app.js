@@ -438,16 +438,61 @@
         gaps.push(`${row.horse_name || row.horse_no} 第${row.race_no}場 T-0 ${live} vs 終賠 ${sp}`);
       }
     });
+    const placeGaps = missingPlacePayouts(state.results.filter((row) => !date || row.race_date === date));
+    const parts = [];
     if (!Object.keys(t0).length) {
-      el.textContent = "撳表入面一隻馬可以核對時間點。馬會冇公開走勢，系統會自己存 10 秒路徑；終賠用來教開跑格。";
-      return;
+      parts.push("馬會唔公開開賽前走勢，所以 10 秒路徑無第二個官方檔可對。核對方法：官方成績表嘅終賠、名次、獨贏／位置派彩。");
+    } else if (!gaps.length) {
+      parts.push((date ? date + "：" : "") + "開跑格同官方終賠相差都 < 10%。");
+    } else {
+      parts.push(`開跑格同官方終賠差 ≥ 10%（${gaps.length} 隻）：` + gaps.slice(0, 6).join("；") + (gaps.length > 6 ? "…" : "") + "。撳馬可以人手更正。");
     }
-    if (!gaps.length) {
-      el.textContent = (date ? date + "：" : "") + "開跑格同官方終賠相差都 < 10%。撳一隻馬睇時間點同 10 秒走勢。";
-      return;
+    if (placeGaps.length) {
+      parts.push(`位置派彩缺漏 ${placeGaps.length} 隻（前 ${placeNeedLabel(placeGaps)} 名唔應係 0）：` +
+        placeGaps.slice(0, 6).map((row) => `${row.horse_name || row.horse_no} 第${row.race_no}場第${row.finish_rank}名`).join("；") +
+        (placeGaps.length > 6 ? "…" : "") + "。應對返 racing.hkjc.com 成績表。");
+    } else if (state.results.length) {
+      parts.push("已完場馬匹嘅位置派彩同官方成績表人數相符（亞／季唔應係 0）。");
     }
-    el.textContent = `開跑格同官方終賠差 ≥ 10%（${gaps.length} 隻）：` + gaps.slice(0, 6).join("；") +
-      (gaps.length > 6 ? "…" : "") + "。撳馬可以人手更正。";
+    el.textContent = parts.join(" ");
+  }
+
+  function expectedPlaceCount(fieldSize) {
+    if (fieldSize >= 7) return 3;
+    if (fieldSize >= 4) return 2;
+    return 1;
+  }
+
+  function missingPlacePayouts(results) {
+    const byRace = {};
+    (results || []).forEach((row) => {
+      const key = [row.race_date, row.venue, String(row.race_no)].join("|");
+      (byRace[key] || (byRace[key] = [])).push(row);
+    });
+    const gaps = [];
+    Object.keys(byRace).forEach((key) => {
+      const horses = byRace[key];
+      const ranked = horses.filter((row) => Number(row.finish_rank) > 0);
+      const need = expectedPlaceCount(ranked.length);
+      ranked.forEach((row) => {
+        const rank = Number(row.finish_rank);
+        if (rank >= 1 && rank <= need && !(Number(row.placedividend) > 0)) gaps.push(row);
+      });
+    });
+    return gaps;
+  }
+
+  function placeNeedLabel(gaps) {
+    return gaps.some((row) => Number(row.finish_rank) === 3) ? "三" : "二";
+  }
+
+  function raceFieldSize(row) {
+    return (state.results || []).filter((other) => (
+      other.race_date === row.race_date
+      && other.venue === row.venue
+      && String(other.race_no) === String(row.race_no)
+      && Number(other.finish_rank) > 0
+    )).length;
   }
 
   function renderHorseAudit() {
@@ -835,7 +880,7 @@
         (strategyFilterOn() ? ` · 符合策略 ${strategySettingLabel()}` : "");
       if ($("board-legend")) {
         $("board-legend").innerHTML =
-          "呢張表係<strong class=\"text-slate-300\">官方賽果派彩</strong>。上面「只看啡格／只看開賽1分鐘前出現啡格／只看符合策略」同樣適用：用獨贏表嘅急跌同策略回測設定去篩選呢啲馬。" +
+          "呢張表係<strong class=\"text-slate-300\">官方賽果派彩</strong>（LocalResults 每 $10）。獨贏只得冠軍有數；位置前 2／3 名都應該有派彩。如果亞／季係 0，即係抄漏，唔係馬會冇派。上面啡格／策略 filter 用獨贏表去篩同一隻馬。" +
           (strategyLegendNote() ? " " + strategyLegendNote() : "");
       }
       const labels = {
@@ -857,11 +902,15 @@
       } else {
         $("data-body").innerHTML = slice
           .map((row) => {
+            const need = expectedPlaceCount(raceFieldSize(row));
+            const rank = Number(row.finish_rank);
+            const plaMissing = rank >= 1 && rank <= need && !(Number(row.placedividend) > 0);
             const tds = RESULT_FIELDS
               .map((f) => {
                 let v = row[f];
                 if (f === "venue") v = venueName(v);
-                return `<td>${v == null || v === "" ? "—" : v}</td>`;
+                const cls = (f === "placedividend" && plaMissing) ? " class=\"cell-brown\"" : "";
+                return `<td${cls}>${v == null || v === "" ? "—" : v}</td>`;
               })
               .join("");
             return `<tr class="cursor-pointer" data-horse-key="${horseKey(row)}">${tds}</tr>`;
